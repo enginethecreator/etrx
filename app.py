@@ -1,4 +1,3 @@
-# app.py
 import os
 import uuid
 import threading
@@ -6,7 +5,6 @@ import time
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template_string
 
-# Check for yt-dlp availability
 try:
     import yt_dlp
 except ImportError:
@@ -15,16 +13,13 @@ except ImportError:
 
 app = Flask(__name__)
 
-# Configuration - Railway specific
-PORT = int(os.environ.get('PORT', 5000))
+# Configuration
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 CLEANUP_AFTER_MINUTES = int(os.environ.get('CLEANUP_AFTER_MINUTES', 10))
 
-# Store download progress for tracking
 progress_store = {}
 
-# HTML Template (keep the same as before, I'll shorten it for space)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -213,8 +208,6 @@ HTML_TEMPLATE = """
 """
 
 class VideoDownloader:
-    """Handles video downloading using yt-dlp"""
-    
     def __init__(self):
         self.ydl_opts = {
             'quiet': True,
@@ -222,7 +215,6 @@ class VideoDownloader:
         }
     
     def get_video_info(self, url):
-        """Extract video metadata without downloading"""
         with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return {
@@ -234,7 +226,6 @@ class VideoDownloader:
             }
     
     def download_video(self, url, quality, download_id):
-        """Initiate video download in a separate thread"""
         output_template = str(DOWNLOAD_DIR / f'%(title)s-{download_id[:8]}.%(ext)s')
         
         format_map = {
@@ -252,8 +243,6 @@ class VideoDownloader:
             'outtmpl': output_template,
             'progress_hooks': [self._progress_hook(download_id)],
             'merge_output_format': 'mp4',
-            'nocheckcertificate': True,
-            'no_color': True,
         }
         
         progress_store[download_id] = {
@@ -270,7 +259,6 @@ class VideoDownloader:
         return download_id
     
     def _download_task(self, url, opts, download_id):
-        """Perform the actual download"""
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -284,7 +272,6 @@ class VideoDownloader:
                     'filepath': filepath,
                 })
                 
-                # Schedule cleanup
                 threading.Thread(target=self._cleanup, args=(filepath,), daemon=True).start()
                 
         except Exception as e:
@@ -294,7 +281,6 @@ class VideoDownloader:
             })
     
     def _progress_hook(self, download_id):
-        """Create a progress hook for tracking download progress"""
         def hook(d):
             if d['status'] == 'downloading':
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
@@ -317,17 +303,14 @@ class VideoDownloader:
         return hook
     
     def _cleanup(self, filepath):
-        """Delete file after specified minutes"""
         time.sleep(CLEANUP_AFTER_MINUTES * 60)
         try:
             if os.path.exists(filepath):
                 os.remove(filepath)
-                print(f"Cleaned up: {filepath}")
-        except Exception as e:
-            print(f"Cleanup failed: {e}")
+        except Exception:
+            pass
     
     def _format_duration(self, seconds):
-        """Convert seconds to HH:MM:SS format"""
         if not seconds: return 'N/A'
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
@@ -335,10 +318,8 @@ class VideoDownloader:
         if hours > 0: return f'{hours}:{minutes:02d}:{seconds:02d}'
         return f'{minutes}:{seconds:02d}'
 
-# Initialize downloader
 downloader = VideoDownloader()
 
-# Routes
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -379,7 +360,7 @@ def get_progress(download_id):
 def serve_download(download_id):
     progress = progress_store.get(download_id)
     if not progress or progress.get('status') != 'completed':
-        return jsonify({'error': 'File not found or not ready'}), 404
+        return jsonify({'error': 'File not found'}), 404
     filepath = progress.get('filepath')
     if not filepath or not os.path.exists(filepath):
         return jsonify({'error': 'File no longer available'}), 404
@@ -388,7 +369,3 @@ def serve_download(download_id):
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy'})
-
-if __name__ == '__main__':
-    print(f"Starting server on port {PORT}")
-    app.run(debug=False, host='0.0.0.0', port=PORT)
