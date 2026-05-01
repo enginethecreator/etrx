@@ -1,5 +1,3 @@
-yt-dlp
-flask>=3.0.0
-gunicorn>=21.2.0
-PyExecJS>=1.5.1
-yt-dlp-ejs
+fastapi
+uvicorn
+yt-dlp[default]
