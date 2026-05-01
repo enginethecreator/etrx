@@ -1,0 +1,11 @@
+# nixpacks.toml
+providers = ["node", "python"]
+
+[phases.setup]
+nixPkgs = ["nodejs-24", "python311"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
