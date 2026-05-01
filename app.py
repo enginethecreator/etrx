@@ -17,7 +17,7 @@ app = Flask(__name__)
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 CLEANUP_AFTER_MINUTES = int(os.environ.get('CLEANUP_AFTER_MINUTES', 10))
-COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "./cookies.txt"))
+# COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "./cookies.txt"))
 
 progress_store = {}
 
@@ -276,11 +276,6 @@ class VideoDownloader:
             'remote_components': ['ejs:python'],
         }
         
-        if COOKIES_FILE.exists():
-            self.ydl_opts['cookiefile'] = str(COOKIES_FILE)
-            print(f"Using cookies from: {COOKIES_FILE}")
-        else:
-            print(f"No cookies.txt found at {COOKIES_FILE}")
     
     def get_video_info(self, url):
         """Extract video metadata with format list as fallback"""
