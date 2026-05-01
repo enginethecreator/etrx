@@ -241,12 +241,14 @@ class VideoDownloader:
     def __init__(self):
         self.ydl_opts = {
             'quiet': True,
-            'no_warnings': False,  # Never silence warnings with auth
+            'no_warnings': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['web'],  # Force web client to avoid bot detection
+                    'player_client': ['web'],
                 }
             },
+            'js_runtimes': {'node': {}},
+            'remote_components': ['ejs:python'],
         }
         
         if COOKIES_FILE.exists():
@@ -299,7 +301,7 @@ class VideoDownloader:
         
         opts = {
             **self.ydl_opts,
-            'format': f'{format_id}+bestaudio/best',  # Simple fallback format string
+            'format': f'{format_id}+bestaudio/best',
             'outtmpl': output_template,
             'progress_hooks': [self._progress_hook(download_id)],
             'merge_output_format': 'mp4',
