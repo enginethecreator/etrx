@@ -67,6 +67,8 @@ def download_video(url: str, download_id: str):
         "format": "b",
         "outtmpl": output_template,
         "progress_hooks": [hook],
+        'js_runtimes': {'node': {}},    # Tells yt-dlp to use Node.js
+        'remote_components': ['ejs:python'],  # Points to the installed yt-dlp-ejs package
     }
 
     try:
