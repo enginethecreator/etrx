@@ -72,14 +72,6 @@ HTML_TEMPLATE = """
             display: inline-block; margin-top: 15px; background: #4caf50; color: white;
             padding: 12px 25px; border-radius: 8px; text-decoration: none; transition: all 0.3s;
         }
-        .format-list { max-height: 300px; overflow-y: auto; margin-top: 10px; }
-        .format-item {
-            display: block; padding: 10px; margin: 5px 0; background: white;
-            border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer;
-            transition: border-color 0.3s;
-        }
-        .format-item:hover { border-color: #667eea; }
-        .format-item input[type="radio"] { margin-right: 10px; }
     </style>
 </head>
 <body>
@@ -125,40 +117,14 @@ HTML_TEMPLATE = """
         function displayVideoInfo(info) {
             const result = document.getElementById('result');
             
-            let formatsHtml = '<label style="font-weight: 500; margin-top: 10px; display: block;">Select Format:</label>';
-            formatsHtml += '<div class="format-list">';
-            
-            info.formats.forEach((f, index) => {
-                const sizeStr = f.filesize ? (f.filesize / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown size';
-                let label = f.resolution + ' - ' + f.ext;
-                if (f.vcodec !== 'none' && f.acodec !== 'none') {
-                    label += ' - Combined';
-                } else if (f.vcodec !== 'none') {
-                    label += ' - Video Only';
-                } else {
-                    label += ' - Audio Only';
-                }
-                label += ' (' + sizeStr + ')';
-                
-                formatsHtml += `
-                    <label class="format-item">
-                        <input type="radio" name="formatId" value="${f.format_id}" ${index === 0 ? 'checked' : ''}>
-                        <strong>${label}</strong>
-                        ${f.format_note ? '<br><small style="color: #666;">' + f.format_note + '</small>' : ''}
-                    </label>`;
-            });
-            
-            formatsHtml += '</div>';
-            
             result.innerHTML = `
                 <div class="video-info">
                     <h3>${info.title || 'Video Information'}</h3>
                     ${info.thumbnail ? `<img src="${info.thumbnail}" style="max-width: 100%; border-radius: 10px; margin: 10px 0;">` : ''}
                     <p><strong>Duration:</strong> ${info.duration || 'N/A'}</p>
                     <p><strong>Uploader:</strong> ${info.uploader || 'N/A'}</p>
-                    ${formatsHtml}
                     <button id="downloadBtn" onclick="startDownload()" style="width: 100%; margin-top: 20px;">
-                        Download Selected Format
+                        Download Best Quality
                     </button>
                 </div>`;
         }
@@ -166,14 +132,6 @@ HTML_TEMPLATE = """
         function startDownload() {
             if (!currentInfo) return;
             const url = document.getElementById('urlInput').value;
-            const selectedFormat = document.querySelector('input[name="formatId"]:checked');
-            
-            if (!selectedFormat) {
-                showError('Please select a format');
-                return;
-            }
-            
-            const formatId = selectedFormat.value;
             const downloadBtn = document.getElementById('downloadBtn');
             downloadBtn.disabled = true;
             downloadBtn.textContent = 'Downloading...';
@@ -188,7 +146,7 @@ HTML_TEMPLATE = """
             fetch('/api/download', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url: url, format_id: formatId})
+                body: JSON.stringify({url: url})
             })
             .then(response => response.json())
             .then(data => {
@@ -211,9 +169,11 @@ HTML_TEMPLATE = """
                         if (progressText) progressText.textContent = 'Complete!';
                         showDownloadLink(data.filename, data.download_url);
                         downloadBtn.disabled = false;
+                        downloadBtn.textContent = 'Download Best Quality';
                     } else if (data.status === 'error') {
                         showError(data.error_message || 'Download failed');
                         downloadBtn.disabled = false;
+                        downloadBtn.textContent = 'Download Best Quality';
                     } else setTimeout(() => checkProgress(downloadId, downloadBtn), 1000);
                 });
         }
@@ -229,7 +189,7 @@ HTML_TEMPLATE = """
             const downloadBtn = document.getElementById('downloadBtn');
             if (downloadBtn) {
                 downloadBtn.disabled = false;
-                downloadBtn.textContent = 'Download Selected Format';
+                downloadBtn.textContent = 'Download Best Quality';
             }
         }
     </script>
@@ -258,50 +218,22 @@ class VideoDownloader:
             print(f"No cookies.txt found at {COOKIES_FILE}")
     
     def get_video_info(self, url):
-        """Extract video info including available formats"""
+        """Extract basic video metadata without format listing"""
         with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
-            formats = []
-            seen_ids = set()
-            
-            for f in info.get('formats', []):
-                fid = f.get('format_id', '')
-                if fid not in seen_ids:
-                    seen_ids.add(fid)
-                    resolution = f.get('resolution') or f.get('format_note') or f'{f.get("height", "?")}p'
-                    formats.append({
-                        'format_id': fid,
-                        'ext': f.get('ext', 'unknown'),
-                        'resolution': resolution,
-                        'filesize': f.get('filesize'),
-                        'vcodec': f.get('vcodec', 'none'),
-                        'acodec': f.get('acodec', 'none'),
-                        'format_note': f.get('format_note', ''),
-                    })
-            
-            # Sort: combined first, then video-only, then audio-only
-            formats.sort(key=lambda x: (
-                0 if (x['vcodec'] != 'none' and x['acodec'] != 'none') 
-                else 1 if x['vcodec'] != 'none' 
-                else 2
-            ))
-            
             return {
                 'title': info.get('title'),
                 'duration': self._format_duration(info.get('duration')),
                 'uploader': info.get('uploader'),
                 'thumbnail': info.get('thumbnail'),
-                'formats': formats,
             }
     
-    def download_video(self, url, format_id, download_id):
-        """Download using specific format ID"""
+    def download_video(self, url, download_id):
+        """Download using yt-dlp's default format selection"""
         output_template = str(DOWNLOAD_DIR / f'%(title)s-{download_id[:8]}.%(ext)s')
         
         opts = {
             **self.ydl_opts,
-            'format': f'{format_id}+bestaudio/best',
             'outtmpl': output_template,
             'progress_hooks': [self._progress_hook(download_id)],
             'merge_output_format': 'mp4',
@@ -408,14 +340,12 @@ def get_video_info():
 def download_video():
     data = request.json
     url = data.get('url')
-    format_id = data.get('format_id')
     
     if not url: return jsonify({'error': 'URL is required'}), 400
-    if not format_id: return jsonify({'error': 'Format ID is required'}), 400
     
     try:
         download_id = str(uuid.uuid4())
-        downloader.download_video(url, format_id, download_id)
+        downloader.download_video(url, download_id)
         return jsonify({'download_id': download_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
