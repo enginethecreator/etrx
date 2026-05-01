@@ -1,19 +1,23 @@
-# app.py
-
 import os
+import uuid
 import asyncio
+import threading
+import time
 from pathlib import Path
 
 import yt_dlp
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="yt-dlp server", version="3.0.0")
+app = FastAPI(title="yt-dlp server", version="4.0.0")
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR", "./downloads"))
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+CLEANUP_AFTER_MINUTES = int(os.environ.get("CLEANUP_AFTER_MINUTES", 10))
+
+progress_store = {}
 
 # ── Models ─────────────────────────────────────────────
 
@@ -21,36 +25,42 @@ class QuickDownloadRequest(BaseModel):
     url: str
 
 
-# ── yt-dlp Options ─────────────────────────────────────
+# ── yt-dlp options ─────────────────────────────────────
 
 BASE_OPTS = {
     "quiet": True,
     "no_warnings": True,
-    "nocheckcertificate": True,
     "noplaylist": True,
     "socket_timeout": 30,
     "retries": 3,
     "fragment_retries": 3,
     "concurrent_fragment_downloads": 3,
-    "http_headers": {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
-    },
 }
 
 
-# ── Core Download ──────────────────────────────────────
+# ── Core download logic ────────────────────────────────
 
-def download_video(url: str) -> dict:
-    output_template = str(DOWNLOADS_DIR / "%(title)s.%(ext)s")
-    file_path = {"value": None}
+def download_video(url: str, download_id: str):
+    output_template = str(DOWNLOADS_DIR / f"%(title)s-{download_id[:8]}.%(ext)s")
 
     def hook(d):
-        if d["status"] == "finished":
-            file_path["value"] = d.get("filename")
+        if d["status"] == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes", 0)
+            percent = (downloaded / total * 100) if total else 0
+
+            progress_store[download_id].update({
+                "status": "downloading",
+                "progress": round(percent, 2),
+                "text": f"{round(percent,2)}%",
+            })
+
+        elif d["status"] == "finished":
+            progress_store[download_id].update({
+                "status": "processing",
+                "progress": 95,
+                "text": "processing...",
+            })
 
     ydl_opts = {
         **BASE_OPTS,
@@ -59,24 +69,40 @@ def download_video(url: str) -> dict:
         "progress_hooks": [hook],
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filepath = ydl.prepare_filename(info)
 
-    if not file_path["value"]:
-        raise RuntimeError("Download failed")
+        file = Path(filepath)
 
-    file = Path(file_path["value"])
+        progress_store[download_id].update({
+            "status": "completed",
+            "progress": 100,
+            "text": "done",
+            "filename": file.name,
+            "filepath": str(file),
+        })
 
-    return {
-        "title": info.get("title"),
-        "file_path": str(file),
-        "filename": file.name,
-        "ext": file.suffix.lstrip("."),
-        "filesize": file.stat().st_size,
-    }
+        threading.Thread(target=cleanup_file, args=(file,), daemon=True).start()
+
+    except Exception as e:
+        progress_store[download_id].update({
+            "status": "error",
+            "error": str(e),
+        })
 
 
-# ── UI Route ───────────────────────────────────────────
+def cleanup_file(file: Path):
+    time.sleep(CLEANUP_AFTER_MINUTES * 60)
+    try:
+        if file.exists():
+            file.unlink()
+    except:
+        pass
+
+
+# ── UI ────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -84,90 +110,59 @@ def home():
 <!DOCTYPE html>
 <html>
 <head>
-  <title>yt-dlp downloader</title>
-  <style>
-    body {
-      font-family: Arial;
-      background: #0f172a;
-      color: #e2e8f0;
-      display: flex;
-      justify-content: center;
-      padding-top: 80px;
-    }
-    .box {
-      width: 500px;
-    }
-    input {
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      border: none;
-      margin-bottom: 10px;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      background: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .result {
-      margin-top: 20px;
-      background: #1e293b;
-      padding: 15px;
-      border-radius: 8px;
-    }
-    a {
-      color: #22c55e;
-    }
-  </style>
+<title>Downloader</title>
+<style>
+body{font-family:sans-serif;background:#0f172a;color:#fff;text-align:center;padding-top:80px}
+input{width:400px;padding:12px;border-radius:8px;border:none}
+button{padding:12px 20px;border:none;background:#3b82f6;color:#fff;border-radius:8px;margin-left:10px}
+.bar{width:400px;height:8px;background:#333;margin:20px auto;border-radius:4px}
+.fill{height:100%;width:0;background:#22c55e}
+</style>
 </head>
 <body>
 
-<div class="box">
-  <h2>yt-dlp downloader</h2>
+<h2>yt-dlp downloader</h2>
 
-  <input id="url" placeholder="Paste YouTube URL..." />
-  <button onclick="download()">Download</button>
+<input id="url" placeholder="paste url"/>
+<button onclick="start()">download</button>
 
-  <div id="output" class="result" style="display:none;"></div>
-</div>
+<div class="bar"><div id="fill" class="fill"></div></div>
+<p id="text"></p>
 
 <script>
-async function download() {
-  const url = document.getElementById("url").value;
-  const output = document.getElementById("output");
+let currentId=null;
 
-  output.style.display = "block";
-  output.innerHTML = "Processing...";
+async function start(){
+    const url=document.getElementById("url").value.trim();
+    if(!url)return;
 
-  try {
-    const res = await fetch("/quick", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ url })
-    });
+    const res=await fetch("/quick",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
+    const data=await res.json();
 
-    const data = await res.json();
+    currentId=data.download_id;
+    poll();
+}
 
-    if (!data.success) {
-      output.innerHTML = "Error: " + JSON.stringify(data);
-      return;
+async function poll(){
+    if(!currentId)return;
+
+    const res=await fetch("/progress/"+currentId);
+    const data=await res.json();
+
+    document.getElementById("fill").style.width=data.progress+"%";
+    document.getElementById("text").innerText=data.text||data.status;
+
+    if(data.status==="completed"){
+        window.location=data.download_url;
+        return;
     }
 
-    const d = data.data;
+    if(data.status==="error"){
+        document.getElementById("text").innerText=data.error;
+        return;
+    }
 
-    output.innerHTML = `
-      <strong>${d.title}</strong><br/><br/>
-      File: ${d.filename}<br/>
-      Size: ${(d.filesize / 1024 / 1024).toFixed(2)} MB<br/><br/>
-      <a href="${d.fetch_url}" target="_blank">Download File</a>
-    `;
-  } catch (err) {
-    output.innerHTML = "Error: " + err.message;
-  }
+    setTimeout(poll,1000);
 }
 </script>
 
@@ -176,40 +171,55 @@ async function download() {
 """
 
 
-# ── API Routes ─────────────────────────────────────────
+# ── API ───────────────────────────────────────────────
 
 @app.post("/quick")
 async def quick_download(req: QuickDownloadRequest):
-    try:
-        result = await asyncio.to_thread(download_video, req.url)
+    download_id = str(uuid.uuid4())
 
-        return {
-            "success": True,
-            "data": {
-                **result,
-                "fetch_url": f"/download/file?path={result['filename']}",
-            },
-        }
+    progress_store[download_id] = {
+        "status": "starting",
+        "progress": 0,
+        "text": "starting...",
+    }
 
-    except yt_dlp.utils.DownloadError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    threading.Thread(
+        target=download_video,
+        args=(req.url, download_id),
+        daemon=True
+    ).start()
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"download_id": download_id}
 
 
-@app.get("/download/file")
-async def serve_file(path: str):
-    file_path = DOWNLOADS_DIR / path
+@app.get("/progress/{download_id}")
+async def get_progress(download_id: str):
+    data = progress_store.get(download_id)
 
-    if not file_path.exists():
-        raise HTTPException(404, "File not found")
+    if not data:
+        return {"status": "not_found"}
 
-    if not str(file_path.resolve()).startswith(str(DOWNLOADS_DIR.resolve())):
-        raise HTTPException(403, "Access denied")
+    if data.get("status") == "completed":
+        data["download_url"] = f"/download/{download_id}"
 
-    return FileResponse(
-        path=str(file_path),
-        filename=file_path.name,
-        media_type="application/octet-stream",
-    )
+    return data
+
+
+@app.get("/download/{download_id}")
+async def serve_file(download_id: str):
+    data = progress_store.get(download_id)
+
+    if not data or data.get("status") != "completed":
+        raise HTTPException(404, "file not ready")
+
+    path = Path(data["filepath"])
+
+    if not path.exists():
+        raise HTTPException(404, "file missing")
+
+    return FileResponse(path=str(path), filename=data["filename"])
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
