@@ -1,5 +1,24 @@
 import os
-import uuid
+import uuid[phases.setup]
+nixPkgs = [
+  "python311",
+  "nodejs_20",
+  "ffmpeg"
+]
+
+[phases.install]
+cmds = [
+  "pip install --upgrade pip",
+  "pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = [
+  "mkdir -p downloads"
+]
+
+[start]
+cmd = "uvicorn app:app --host 0.0.0.0 --port $PORT"
 import asyncio
 import threading
 import time
