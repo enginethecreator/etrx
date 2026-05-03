@@ -1,50 +1,34 @@
 import os
-import uuid[phases.setup]
-nixPkgs = [
-  "python311",
-  "nodejs_20",
-  "ffmpeg"
-]
-
-[phases.install]
-cmds = [
-  "pip install --upgrade pip",
-  "pip install -r requirements.txt"
-]
-
-[phases.build]
-cmds = [
-  "mkdir -p downloads"
-]
-
-[start]
-cmd = "uvicorn app:app --host 0.0.0.0 --port $PORT"
-import asyncio
+import uuid
 import threading
 import time
 from pathlib import Path
 
 import yt_dlp
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="yt-dlp server", version="4.0.0")
+# ── App Setup ─────────────────────────────────────────
+
+app = FastAPI(title="yt-dlp server", version="5.0.0")
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR", "./downloads"))
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+COOKIES_FILE = Path("./cookies.txt")
 
 CLEANUP_AFTER_MINUTES = int(os.environ.get("CLEANUP_AFTER_MINUTES", 10))
 
 progress_store = {}
 
-# ── Models ─────────────────────────────────────────────
+# ── Models ────────────────────────────────────────────
 
 class QuickDownloadRequest(BaseModel):
     url: str
 
 
-# ── yt-dlp options ─────────────────────────────────────
+# ── yt-dlp base options (2026 safe config) ────────────
 
 BASE_OPTS = {
     "quiet": True,
@@ -54,13 +38,43 @@ BASE_OPTS = {
     "retries": 3,
     "fragment_retries": 3,
     "concurrent_fragment_downloads": 3,
+
+    # Critical for modern YouTube
+    "js_runtimes": {"node": {}},
+    "remote_components": ["ejs:python"],
+
+    # Stability
+    "nocheckcertificate": True,
 }
 
 
-# ── Core download logic ────────────────────────────────
+# ── Core download with retry + cookies fallback ───────
+
+def run_yt_dlp(url: str, opts: dict):
+    def _run(options):
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=True)
+            return ydl, info
+
+    try:
+        return _run(opts)
+
+    except Exception as e:
+        err = str(e).lower()
+
+        if any(x in err for x in ["sign in", "bot", "403", "429"]):
+            if COOKIES_FILE.exists():
+                opts2 = {**opts, "cookiefile": str(COOKIES_FILE)}
+                return _run(opts2)
+
+        raise
+
+
+# ── Download Logic ────────────────────────────────────
 
 def download_video(url: str, download_id: str):
-    output_template = str(DOWNLOADS_DIR / f"%(title)s-{download_id[:8]}.%(ext)s")
+    uid = download_id[:8]
+    output_template = str(DOWNLOADS_DIR / f"%(title)s-{uid}.%(ext)s")
 
     def hook(d):
         if d["status"] == "downloading":
@@ -81,21 +95,21 @@ def download_video(url: str, download_id: str):
                 "text": "processing...",
             })
 
-    ydl_opts = {
+    opts = {
         **BASE_OPTS,
-        "format": "b",
+        "format": "b",  # keep your stable working selector
         "outtmpl": output_template,
         "progress_hooks": [hook],
-        'js_runtimes': {'node': {}},    # Tells yt-dlp to use Node.js
-        'remote_components': ['ejs:python'],  # Points to the installed yt-dlp-ejs package
     }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filepath = ydl.prepare_filename(info)
+        ydl, info = run_yt_dlp(url, opts)
 
+        filepath = ydl.prepare_filename(info)
         file = Path(filepath)
+
+        if not file.exists():
+            raise RuntimeError("file not found after download")
 
         progress_store[download_id].update({
             "status": "completed",
@@ -105,7 +119,11 @@ def download_video(url: str, download_id: str):
             "filepath": str(file),
         })
 
-        threading.Thread(target=cleanup_file, args=(file,), daemon=True).start()
+        threading.Thread(
+            target=cleanup_file,
+            args=(file,),
+            daemon=True
+        ).start()
 
     except Exception as e:
         progress_store[download_id].update({
@@ -113,6 +131,8 @@ def download_video(url: str, download_id: str):
             "error": str(e),
         })
 
+
+# ── Cleanup ───────────────────────────────────────────
 
 def cleanup_file(file: Path):
     time.sleep(CLEANUP_AFTER_MINUTES * 60)
@@ -157,9 +177,13 @@ async function start(){
     const url=document.getElementById("url").value.trim();
     if(!url)return;
 
-    const res=await fetch("/quick",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
-    const data=await res.json();
+    const res=await fetch("/quick",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({url})
+    });
 
+    const data=await res.json();
     currentId=data.download_id;
     poll();
 }
@@ -238,7 +262,10 @@ async def serve_file(download_id: str):
     if not path.exists():
         raise HTTPException(404, "file missing")
 
-    return FileResponse(path=str(path), filename=data["filename"])
+    return FileResponse(
+        path=str(path),
+        filename=data["filename"]
+    )
 
 
 @app.get("/health")
