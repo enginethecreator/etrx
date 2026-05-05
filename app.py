@@ -97,7 +97,7 @@ def download_video(url: str, download_id: str):
 
     opts = {
         **BASE_OPTS,
-        "format": "b",  # keep your stable working selector
+        "format": "bestvideo[height<=720]+bestaudio/bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]/bestvideo+bestaudio/best",  # keep your stable working selector
         "outtmpl": output_template,
         "progress_hooks": [hook],
     }
