@@ -63,7 +63,7 @@ def get_yt_dlp_options(download_id: str = None, progress_hook=None):
         'impersonate': '',  # Uses curl_cffi for TLS fingerprinting
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['ios', 'web'],
                 'player_skip': ['webpage', 'configs'],
                 # Ensure yt-dlp-ejs is utilized if available for JS challenges
                 'js_runtime': 'deno', 
