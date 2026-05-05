@@ -58,7 +58,7 @@ def get_yt_dlp_options(download_id: str = None, progress_hook=None):
     opts = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'best',
+        'format': 'b',
         # Modern Anti-Bot Measures
         'impersonate': '',  # Uses curl_cffi for TLS fingerprinting
         'extractor_args': {
