@@ -90,11 +90,12 @@ def build_ydl_opts(extra: dict = None) -> dict:
             "youtube": {
                 # Let yt‑dlp select the best clients automatically
                 "player_client": ["default"],
+                "player_skip": ["default"],
             }
         },
         # External JS (EJS) – required for solving YouTube challenges
         # Remote components allow on‑the‑fly npm downloads (needs deno/bun).
-        "remote_components": ["ejs:npm"],
+        "remote_components": ["ejs:deno"],
         # Impersonation (if curl_cffi is installed)
         "impersonate": "",
     }
