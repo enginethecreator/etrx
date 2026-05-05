@@ -1,6 +1,6 @@
 fastapi
-uvicorn[standard]
-yt-dlp[default]
+uvicorn
+yt-dlp[standard]
 yt-dlp-ejs
 brotli
 certifi
