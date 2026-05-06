@@ -1,12 +1,9 @@
 [phases.setup]
-nixPkgs = [
-  "python311",
-  "deno",
-  "ffmpeg-full"
-]
+nixPkgs = ["...", "deno", "ffmpeg"]
 
 [phases.install]
 cmds = [
+  "python -m pip install --upgrade pip",
   "pip install -r requirements.txt"
 ]
 
@@ -16,4 +13,4 @@ cmds = [
 ]
 
 [start]
-cmd = "export PATH=$PATH:/usr/bin:/nix/var/nix/profiles/default/bin && uvicorn app:app --host 0.0.0.0 --port $PORT"
+cmd = "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}"
