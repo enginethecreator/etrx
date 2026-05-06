@@ -4,6 +4,7 @@ import os
 import asyncio
 import threading
 import time
+import shutil
 import uuid
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -19,7 +20,7 @@ app = FastAPI(title="yt-dlp server", version="5.0.0")
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR", "./downloads"))
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
+print("FFMPEG PATH:", shutil.which("ffmpeg"))
 CLEANUP_AFTER_MINUTES = int(os.environ.get("CLEANUP_AFTER_MINUTES", 10))
 
 progress_store: Dict[str, dict] = {}
