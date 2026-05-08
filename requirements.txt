@@ -1,8 +1,6 @@
 fastapi
 uvicorn[standard]
-yt-dlp[default]>=2026.03.17
-yt-dlp-ejs>=0.8.0
-ffmpeg
+yt-dlp[default]
 brotli
 certifi
 curl-cffi
