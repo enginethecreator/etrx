@@ -37,7 +37,7 @@ BASE_OPTS = {
     "concurrent_fragment_downloads": 3,
     "nocheckcertificate": True,
     # New 2026 Bypass Settings
-    "js_runtimes": ["deno", "node"],
+    "js_runtimes": ["deno", : {}],
     "extractor_args": {
         "youtube": {
             "player_client": ["android", "web"],
