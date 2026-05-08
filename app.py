@@ -28,7 +28,7 @@ progress_store: Dict[str, dict] = {}
 VERBOSE = os.environ.get("YTDLP_VERBOSE", "0") == "1"
 
 BASE_OPTS = {
-    "quiet": not VERBOSE,
+    "quiet": False,
     "no_warnings": not VERBOSE,
     "noplaylist": True,
     "socket_timeout": 30,
