@@ -221,59 +221,92 @@ button{padding:12px 20px;border:none;background:#3b82f6;color:#fff;border-radius
 </style>
 </head>
 <body>
-<h2>yt-dlp advanced downloader</h2>
-<input id="url" placeholder="paste url"/><br>
-<button onclick="getInfo()">get formats</button><br>
-<select id="formats"></select><br>
-<button onclick="start()">download</button>
-<div class="bar"><div id="fill" class="fill"></div></div>
-<p id="text"></p>
-<script>
-let currentId=null;
-async function getInfo(){
-    const url=document.getElementById("url").value;
-    const res=await fetch("/info",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
-    const data=await res.json();
-    const select=document.getElementById("formats");
-    select.innerHTML="";
-    data.formats.video.forEach(f=>{
-        const opt=document.createElement("option");
-        opt.value=f.format_id;
-        opt.text=`${f.height}p (${(f.filesize||0)/1000000}MB)`;
-        select.appendChild(opt);
-    });
-    if(data.formats.audio){
-        const opt=document.createElement("option");
-        opt.value=data.formats.audio.format_id;
-        opt.text=`audio (${(data.formats.audio.filesize||0)/1000000}MB)`;
-        select.appendChild(opt);
+  <h2>yt-dlp advanced downloader</h2>
+  <input id="url" placeholder="Paste YouTube URL" /><br />
+  <button onclick="getInfo()">Get formats</button><br />
+
+  <select id="formats"></select><br />
+
+  <button onclick="start()">Download</button>
+
+  <div class="bar"><div id="fill" class="fill"></div></div>
+  <p id="text"></p>
+
+  <script>
+    let currentId = null;
+
+    async function getInfo() {
+      const url = document.getElementById("url").value;
+      const res = await fetch("/info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+      const response = await res.json();
+      const data = response.formats;
+      const select = document.getElementById("formats");
+      select.innerHTML = "";
+
+      function addOption(group, f, prefix) {
+        const opt = document.createElement("option");
+        opt.value = f.format_id;
+        const sizeMB = f.filesize ? (f.filesize / 1_000_000).toFixed(1) : "?";
+        opt.text = `${prefix} ${f.resolution || "audio"} (${sizeMB} MB) [${f.vcodec || f.acodec || "?"}]`;
+        group.appendChild(opt);
+      }
+
+      if (data.video_only && data.video_only.length) {
+        const group = document.createElement("optgroup");
+        group.label = "🎬 Video-only (no audio)";
+        data.video_only.forEach(f => addOption(group, f, ""));
+        select.appendChild(group);
+      }
+
+      if (data.video_audio && data.video_audio.length) {
+        const group = document.createElement("optgroup");
+        group.label = "🎥 Video + Audio (single file)";
+        data.video_audio.forEach(f => addOption(group, f, ""));
+        select.appendChild(group);
+      }
+
+      if (data.audio_only && data.audio_only.length) {
+        const group = document.createElement("optgroup");
+        group.label = "🎵 Audio-only";
+        data.audio_only.forEach(f => addOption(group, f, ""));
+        select.appendChild(group);
+      }
     }
-}
-async function start(){
-    const url=document.getElementById("url").value;
-    const format_id=document.getElementById("formats").value;
-    const res=await fetch("/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,format_id})});
-    const data=await res.json();
-    currentId=data.download_id;
-    poll();
-}
-async function poll(){
-    if(!currentId)return;
-    const res=await fetch("/progress/"+currentId);
-    const data=await res.json();
-    document.getElementById("fill").style.width=data.progress+"%";
-    document.getElementById("text").innerText=data.text||data.status;
-    if(data.status==="completed"){
-        window.location="/download/"+currentId;
+
+    async function start() {
+      const url = document.getElementById("url").value;
+      const format_id = document.getElementById("formats").value;
+      const res = await fetch("/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, format_id })
+      });
+      const data = await res.json();
+      currentId = data.download_id;
+      poll();
+    }
+
+    async function poll() {
+      if (!currentId) return;
+      const res = await fetch("/progress/" + currentId);
+      const data = await res.json();
+      document.getElementById("fill").style.width = data.progress + "%";
+      document.getElementById("text").innerText = data.text || data.status;
+      if (data.status === "completed") {
+        window.location = "/download/" + currentId;
         return;
-    }
-    if(data.status==="error"){
-        document.getElementById("text").innerText=data.error;
+      }
+      if (data.status === "error") {
+        document.getElementById("text").innerText = data.error;
         return;
+      }
+      setTimeout(poll, 1000);
     }
-    setTimeout(poll,1000);
-}
-</script>
+  </script>
 </body>
 </html>
 """
