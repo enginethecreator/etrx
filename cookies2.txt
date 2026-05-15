@@ -1,7 +1,4 @@
 # Netscape HTTP Cookie File
-# https://curl.haxx.se/rfc/cookie_spec.html
-# This is a generated file! Do not edit.
-
 .youtube.com	TRUE	/	TRUE	0	__Secure-ROLLOUT_TOKEN	COLvoo301t79TRDG7pT9tJeUAxiP7ajGzLuUAw%3D%3D
 .youtube.com	TRUE	/	TRUE	0	__Secure-1PSIDTS	sidts-CjQBhkeRd82-CACgSJhsdZPBIKNj7o7aQm6DEzsWjmM7rVvzDS0eLcuCLEGXWKNcKYgM9JE5EAA
 .youtube.com	TRUE	/	TRUE	0	__Secure-3PSIDTS	sidts-CjQBhkeRd82-CACgSJhsdZPBIKNj7o7aQm6DEzsWjmM7rVvzDS0eLcuCLEGXWKNcKYgM9JE5EAA
@@ -18,8 +15,8 @@
 .youtube.com	TRUE	/	FALSE	0	SIDCC	AKEyXzUdWTWBovtBBc8FJ2CNmFoe81PanzCt4ibFv50KRLrknFsZW5vCsnnPnac6kk3TbaUC
 .youtube.com	TRUE	/	TRUE	0	__Secure-1PSIDCC	AKEyXzXk_dnWBFphvOuaxjf4pydwdyEtvomdmumAsoS4L_bQy60T-HlpOyMNjw9bUhUB4O4Z
 .youtube.com	TRUE	/	TRUE	0	__Secure-3PSIDCC	AKEyXzXU1_LhxsB1ZmslVlLwacXYDIgdm_FRVQ2GGOCx_yKw8-kx8FA2gOKiEC9JayNMiWDHdw
+.youtube.com	TRUE	/	TRUE	0	YSC	BnAF8zlTEtE
 .youtube.com	TRUE	/	TRUE	0	VISITOR_INFO1_LIVE	ULJvhkX-bEo
 .youtube.com	TRUE	/	TRUE	0	VISITOR_PRIVACY_METADATA	CgJORxIEGgAgOw%3D%3D
 .youtube.com	TRUE	/	TRUE	0	CONSENT	YES+WIPR
 .youtube.com	TRUE	/	TRUE	0	PREF	f6=40000000&tz=Africa.Lagos
-.youtube.com	TRUE	/	TRUE	0	YSC	BnAF8zlTEtE
