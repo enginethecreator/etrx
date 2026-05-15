@@ -38,7 +38,7 @@ BASE_OPTS = {
     "nocheckcertificate": True,
     # New 2026 Bypass Settings
     'js_runtimes': {
-        'node': {}
+        'deno': {}
     },
    #  "extractor_args": {
       #  "youtube": {
