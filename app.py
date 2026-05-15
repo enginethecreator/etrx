@@ -39,13 +39,13 @@ BASE_OPTS = {
     # New 2026 Bypass Settings
     'js_runtimes': {
         'node': {}
-    }
-    # "extractor_args": {
-      #  "youtube": {
+    },
+     "extractor_args": {
+        "youtube": {
       #      "player_client": ["android", "web"],
-      #      "remote_components": ["ejs:github"]
-      #  }
-   # }
+            "remote_components": ["ejs:github"],
+        },
+    },
 }
 
 # ── Models ────────────────────────────────────────────
