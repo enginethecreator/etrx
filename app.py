@@ -68,35 +68,53 @@ def is_auth_error(exception: Exception) -> bool:
 
 def normalize_selector(format_id: Optional[str]) -> str:
     if format_id:
-        return f"{format_id}+bestaudio/{format_id}"
+        return f"bestvideo[format_id={format_id}]+bestaudio"
     return "b"
 
+
 def simplify_formats(formats: List[dict]) -> dict:
-    video_targets = [1080, 720, 360]
-    video_map = {h: None for h in video_targets}
-    best_audio = None
+    video_only = []
+    video_audio = []
+    audio_only = []
 
     for f in formats:
-        if f.get("vcodec") != "none" and f.get("height") in video_targets:
-            h = f.get("height")
-            if not video_map[h]:
-                video_map[h] = {
-                    "format_id": f["format_id"],
-                    "ext": f["ext"],
-                    "height": h,
-                    "filesize": f.get("filesize") or f.get("filesize_approx"),
-                }
-        if f.get("acodec") != "none" and f.get("vcodec") == "none":
-            if not best_audio or (f.get("abr") or 0) > (best_audio.get("abr") or 0):
-                best_audio = {
-                    "format_id": f["format_id"],
-                    "ext": f["ext"],
-                    "abr": f.get("abr"),
-                    "filesize": f.get("filesize") or f.get("filesize_approx"),
-                }
+        vcodec = f.get("vcodec", "none")
+        acodec = f.get("acodec", "none")
+        ext = f.get("ext", "")
+        height = f.get("height")        # None for audio-only
+
+        if vcodec == "none" and acodec == "none":
+            continue
+
+        # Video formats: skip if resolution is below 360p
+        if vcodec != "none":
+            if height is None or height < 360:
+                continue
+
+        entry = {
+            "format_id": f["format_id"],
+            "ext": ext,
+            "resolution": f.get("resolution") or (f"{height}p" if height else ""),
+            "vcodec": vcodec if vcodec != "none" else None,
+            "acodec": acodec if acodec != "none" else None,
+            "filesize": f.get("filesize") or f.get("filesize_approx"),
+            "note": f.get("format_note", ""),
+        }
+
+        if vcodec != "none" and acodec == "none":
+            if ext == "mp4":
+                video_only.append(entry)
+        elif vcodec != "none" and acodec != "none":
+            if ext == "mp4":
+                video_audio.append(entry)
+        elif vcodec == "none" and acodec != "none":
+            if ext == "m4a":       # ← changed from "mp3" to "m4a"
+                audio_only.append(entry)
+
     return {
-        "video": [v for v in video_map.values() if v],
-        "audio": best_audio,
+        "video_only": video_only,
+        "video_audio": video_audio,
+        "audio_only": audio_only,
     }
 
 # ── Core Logic ────────────────────────────────────────
@@ -150,15 +168,15 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
     ydl_opts = {
         **BASE_OPTS,
         # "format": "bv*+ba/b",
-        "format": "bestvideo+bestaudio[ext=m4a]/best",
-        "format_sort": [
+        "format": selector
+        # "format_sort": [
             # 'vcodec:h264',
-            'vbr',
-            'height',
-            'ext:mp4',
+           # 'vbr',
+           # 'height',
+           # 'ext:mp4',
           #  'res:1080',      # Aim for 1080p specifically
            # 'acodec:mp4a'
-        ],
+        #],
         "outtmpl": output_template,
         "progress_hooks": [hook],
         "merge_output_format": "mp4",
