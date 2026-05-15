@@ -1,8 +1,4 @@
 fastapi
 uvicorn[standard]
-yt-dlp[default]
-brotli
-certifi
-curl-cffi
-mutagen
+yt-dlp[all]
 
