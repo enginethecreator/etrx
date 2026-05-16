@@ -26,11 +26,11 @@ from pydantic import BaseModel
 
 app = FastAPI(title="yt-dlp server", version="5.0.1")
 
-@app.on_event("startup")
-async def startup_event():
-    """Ensures ffmpeg is ready before the first request."""
-    await asyncio.to_thread(setup_ffmpeg)
-    print("[INFO] Startup complete – ffmpeg is available.")
+#@app.on_event("startup")
+#async def startup_event():
+   # """Ensures ffmpeg is ready before the first request."""
+   # await asyncio.to_thread(setup_ffmpeg)
+   # print("[INFO] Startup complete – ffmpeg is available.")
 
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR", "./downloads"))
@@ -39,10 +39,10 @@ print("FFMPEG PATH:", shutil.which("ffmpeg"))
 CLEANUP_AFTER_MINUTES = int(os.environ.get("CLEANUP_AFTER_MINUTES", 10))
 COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "./cookies.txt"))
 
-print(f"OS: {platform.system()}")                  # e.g. Linux
-print(f"Release: {platform.release()}")            # e.g. 5.15.0-1061-aws
-print(f"Version: {platform.version()}")            # full version string
-print(f"Architecture: {platform.machine()}")       # e.g. x86_64
+#print(f"OS: {platform.system()}")                  # e.g. Linux
+#print(f"Release: {platform.release()}")            # e.g. 5.15.0-1061-aws
+#print(f"Version: {platform.version()}")            # full version string
+#print(f"Architecture: {platform.machine()}")       # e.g. x86_64
 
 FFMPEG_DIR = Path("ffmpeg_bin")
 FFMPEG_PATH = FFMPEG_DIR / "ffmpeg"
@@ -57,9 +57,9 @@ BASE_OPTS = {
     "no_warnings": not VERBOSE,
     "noplaylist": True,
     "socket_timeout": 30,
-    "retries": 3,
-    "fragment_retries": 3,
-    "concurrent_fragment_downloads": 3,
+    "retries": 1,
+    "fragment_retries": 2,
+    "concurrent_fragment_downloads": 2,
     "nocheckcertificate": True,
     # New 2026 Bypass Settings
     'js_runtimes': {
@@ -252,13 +252,13 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
 
     ydl_opts = {
         **BASE_OPTS,
-         "format": "{format_id}+ba",
+         "format": format_id,
     
-         #"format_sort": [ 'vcodec:h264','vbr','height','ext:mp4','res:1080','acodec:mp4a'],
+       #  "format_sort": [ 'vcodec:{format_id}','res','acodec:mp4a'],
         "outtmpl": output_template,
         "progress_hooks": [hook],
-        "merge_output_format": "mp4",
-        "ffmpeg_location": str(FFMPEG_PATH), # Points directly to the binary
+        #"merge_output_format": "mp4",
+      #  "ffmpeg_location": str(FFMPEG_PATH), # Points directly to the binary
     }
     print(f"Opts: {ydl_opts}. ...")
     if use_cookies and COOKIES_FILE.exists():
