@@ -26,6 +26,13 @@ from pydantic import BaseModel
 
 app = FastAPI(title="yt-dlp server", version="5.0.1")
 
+@app.on_event("startup")
+async def startup_event():
+    """Ensures ffmpeg is ready before the first request."""
+    await asyncio.to_thread(setup_ffmpeg)
+    print("[INFO] Startup complete – ffmpeg is available.")
+
+
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR", "./downloads"))
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 print("FFMPEG PATH:", shutil.which("ffmpeg"))
@@ -454,9 +461,5 @@ def health():
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    print("[INFO] Starting server setup...")
-    if not setup_ffmpeg():
-        print("[WARN] Server will run but format merging (video+audio) may fail.")
-    else:
-        print("[INFO] Setup complete. Starting server on http://0.0.0.0:8000")
+    print("[INFO] Starting server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
