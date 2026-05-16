@@ -252,12 +252,12 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
 
     ydl_opts = {
         **BASE_OPTS,
-         "format": "bv*+ba/b",
+         "format": "137+140",
        # "format": format_id,
          #"format_sort": [ 'vcodec:h264','vbr','height','ext:mp4','res:1080','acodec:mp4a'],
         "outtmpl": output_template,
         "progress_hooks": [hook],
-      #  "merge_output_format": "mp4",
+        "merge_output_format": "mp4",
         "ffmpeg_location": str(FFMPEG_PATH), # Points directly to the binary
     }
     print(f"Opts: {ydl_opts}. ...")
