@@ -146,8 +146,8 @@ def fetch_info(url: str, use_cookies: bool = False):
         raise e
 
 def download_video(url: str, download_id: str, format_id: Optional[str], use_cookies: bool = False):
-    selector = normalize_selector(format_id)
-    output_template = str(DOWNLOADS_DIR / f"%(title)s-{download_id[:8]}.%(ext)s")
+  #  selector = normalize_selector(format_id)
+    output_template = str(DOWNLOADS_DIR / f"%(title)s-{download_id[:3]}.%(ext)s")
 
     def hook(d):
         if d["status"] == "downloading":
@@ -169,18 +169,11 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
     ydl_opts = {
         **BASE_OPTS,
         # "format": "bv*+ba/b",
-        "format": "bestvideo+bestaudio[ext=m4a]/best",
-        "format_sort": [
-            # 'vcodec:h264',
-            'vbr',
-            'height',
-            'ext:mp4',
-          #  'res:1080',      # Aim for 1080p specifically
-           # 'acodec:mp4a'
-        ],
+        "format": format_id
+         #"format_sort": [ 'vcodec:h264','vbr','height','ext:mp4','res:1080','acodec:mp4a'],
         "outtmpl": output_template,
         "progress_hooks": [hook],
-        "merge_output_format": "mp4",
+      #  "merge_output_format": "mp4",
     }
 
     if use_cookies and COOKIES_FILE.exists():
