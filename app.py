@@ -65,12 +65,7 @@ BASE_OPTS = {
     'js_runtimes': {
         'node': {}
     },
-   #  "extractor_args": {
-      #  "youtube": {
-      #      "player_client": ["android", "web"],
-       #     "remote_components": ["ejs:github"],
-     #   },
-   # },
+     "extractor_args": {"youtube":{ "remote_components":["ejs:github"]}},
 }
 
 # ── Models ────────────────────────────────────────────
