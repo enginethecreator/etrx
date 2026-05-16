@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["...", "python311", "deno", "ffmpeg"]
+nixPkgs = ["...", "deno", "ffmpeg"]
 
 [phases.install]
 cmds = [
