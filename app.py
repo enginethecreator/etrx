@@ -50,7 +50,7 @@ BASE_OPTS = {
     },
     # Eagerly attach cookies if the file exists at startup.
     # 'cookies' is the correct Python API key (≥2026.03.17); 'cookiefile' is legacy CLI-only.
-    **( {"cookies": str(COOKIES_FILE)} if COOKIES_FILE.exists() else {} ),
+    "cookiefile": str(COOKIES_FILE) if COOKIES_FILE.exists() else None,
 }
 
 # ── Models ────────────────────────────────────────────
