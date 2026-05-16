@@ -252,7 +252,7 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
 
     ydl_opts = {
         **BASE_OPTS,
-         "format": "137+140",
+         "format": "b",
        # "format": format_id,
          #"format_sort": [ 'vcodec:h264','vbr','height','ext:mp4','res:1080','acodec:mp4a'],
         "outtmpl": output_template,
