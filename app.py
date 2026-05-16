@@ -54,7 +54,8 @@ VERBOSE = os.environ.get("YTDLP_VERBOSE", "0") == "1"
 
 BASE_OPTS = {
     "quiet": False,
-    "no_warnings": not VERBOSE,
+    "no_warnings": False,
+    "verbose": True,
     "noplaylist": True,
     "socket_timeout": 30,
     "retries": 1,
@@ -62,10 +63,8 @@ BASE_OPTS = {
     "concurrent_fragment_downloads": 2,
     "nocheckcertificate": True,
     # New 2026 Bypass Settings
-    'js_runtimes': {
-        'node': {}
-    },
-     "extractor_args": {"youtube":{ "remote_components":["ejs:github"]}},
+    'js_runtimes': { 'deno': {'path': None}, 'node': {'path': None}},
+     #"extractor_args": {"youtube":{ "remote_components":["ejs:github"]}},
 }
 
 # ── Models ────────────────────────────────────────────
