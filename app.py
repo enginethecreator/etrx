@@ -36,16 +36,20 @@ BASE_OPTS = {
     "fragment_retries": 3,
     "concurrent_fragment_downloads": 3,
     "nocheckcertificate": True,
-    # New 2026 Bypass Settings
-    'js_runtimes': {
-        'node': {}
+    # 2026 JS runtime — 'path': None lets yt-dlp auto-detect the deno binary on PATH
+    "js_runtimes": {
+        "deno": {"path": None},
     },
-     "extractor_args": {
+    "extractor_args": {
         "youtube": {
-      #      "player_client": ["android", "web"],
+            # web/android clients honour cookiefile; ios does not — keep clients cookie-compatible
+            "player_client": ["web", "android"],
             "remote_components": ["ejs:github"],
         },
     },
+    # Eagerly attach cookies if the file exists at startup.
+    # 'cookies' is the correct Python API key (≥2026.03.17); 'cookiefile' is legacy CLI-only.
+    **( {"cookies": str(COOKIES_FILE)} if COOKIES_FILE.exists() else {} ),
 }
 
 # ── Models ────────────────────────────────────────────
@@ -56,13 +60,6 @@ class InfoRequest(BaseModel):
 class DownloadRequest(BaseModel):
     url: str
     format_id: Optional[str] = None
-
-# ── Logic Helpers ─────────────────────────────────────
-
-def is_auth_error(exception: Exception) -> bool:
-    """Check if the error message indicates a need for cookies."""
-    err_msg = str(exception).lower()
-    return "sign in" in err_msg or "bot" in err_msg or "confirm your age" in err_msg
 
 # ── Format Normalizer ─────────────────────────────────
 
@@ -119,15 +116,13 @@ def simplify_formats(formats: List[dict]) -> dict:
 
 # ── Core Logic ────────────────────────────────────────
 
-def fetch_info(url: str, use_cookies: bool = False):
+def fetch_info(url: str):
     opts = {**BASE_OPTS, "skip_download": True}
-    if use_cookies and COOKIES_FILE.exists():
-        opts["cookiefile"] = str(COOKIES_FILE)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
-        
+
         formats = info.get("formats", [])
         simplified = simplify_formats(formats)
 
@@ -137,14 +132,10 @@ def fetch_info(url: str, use_cookies: bool = False):
             "formats": simplified,
         }
     except Exception as e:
-        if not use_cookies and is_auth_error(e) and COOKIES_FILE.exists():
-            print(f"[RETRY] Auth/Bot error detected for {url}. Retrying with cookies...")
-            return fetch_info(url, use_cookies=True)
-        
         print(f"[ERROR] fetch_info failed: {str(e)}")
         raise e
 
-def download_video(url: str, download_id: str, format_id: Optional[str], use_cookies: bool = False):
+def download_video(url: str, download_id: str, format_id: Optional[str]):
     selector = normalize_selector(format_id)
     output_template = str(DOWNLOADS_DIR / f"%(title)s-{download_id[:8]}.%(ext)s")
 
@@ -167,23 +158,11 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
 
     ydl_opts = {
         **BASE_OPTS,
-        # "format": "bv*+ba/b",
         "format": selector,
-        # "format_sort": [
-            # 'vcodec:h264',
-           # 'vbr',
-           # 'height',
-           # 'ext:mp4',
-          #  'res:1080',      # Aim for 1080p specifically
-           # 'acodec:mp4a'
-        #],
         "outtmpl": output_template,
         "progress_hooks": [hook],
         "merge_output_format": "mp4",
     }
-
-    if use_cookies and COOKIES_FILE.exists():
-        ydl_opts["cookiefile"] = str(COOKIES_FILE)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -202,10 +181,6 @@ def download_video(url: str, download_id: str, format_id: Optional[str], use_coo
         threading.Thread(target=cleanup_file, args=(file,), daemon=True).start()
 
     except Exception as e:
-        if not use_cookies and is_auth_error(e) and COOKIES_FILE.exists():
-            print(f"[RETRY] Auth/Bot error detected for {download_id}. Retrying with cookies...")
-            return download_video(url, download_id, format_id, use_cookies=True)
-        
         print(f"[ERROR] download_video failed for {download_id}: {str(e)}")
         progress_store[download_id].update({
             "status": "error",
@@ -224,9 +199,7 @@ def cleanup_file(file: Path):
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    # Content identical to original app 5.py
-    return """
-<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -1150,8 +1123,9 @@ def home():
   });
 </script>
 </body>
-</html>
-"""
+</html>"""
+
+# ── API Endpoints ──────────────────────────────────────
 
 @app.post("/info")
 async def info(req: InfoRequest):
