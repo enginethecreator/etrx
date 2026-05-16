@@ -38,14 +38,14 @@ BASE_OPTS = {
     "nocheckcertificate": True,
     # New 2026 Bypass Settings
     'js_runtimes': {
-        'node': {}
+        'deno': {}
     },
-   #  "extractor_args": {
-      #  "youtube": {
+     "extractor_args": {
+        "youtube": {
       #      "player_client": ["android", "web"],
-       #     "remote_components": ["ejs:github"],
-     #   },
-   # },
+            "remote_components": ["ejs:github"],
+        },
+    },
 }
 
 # ── Models ────────────────────────────────────────────
