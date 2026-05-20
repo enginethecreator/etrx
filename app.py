@@ -1,9 +1,3 @@
-"""
-ClipForge —- YouTube Clip Intelligence & Production Engine
-Flask app: subtitle extraction, transcript formatting, blueprint parsing, FFmpeg clip rendering, synthetic video assembly system.
-"""
-
-
 import os
 import re
 import json
@@ -611,16 +605,20 @@ def _render_synthetic_worker(job_id: str, clip: dict, image_paths: list[str], au
         output_path = str(OUTPUT_DIR / output_name)
 
         silent_video = str(work_dir / "silent.mp4")
-        encode_cmd   = [
-            "ffmpeg", "-y",
-            "-framerate", str(FPS),
-            "-i", str(frame_dir / "frame_%06d.png"),
-            "-c:v", "libx264", "-preset", "fast",
-            "-profile:v", "main", "-level:v", "4.0",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            silent_video
-        ]
+        
+        encode_cmd = [
+    "ffmpeg", "-y",
+    "-framerate", str(FPS),
+    "-start_number", "0",
+    "-i", str(frame_dir / "frame_%06d.png"),
+    "-vf", "scale=1080:1920:flags=lanczos,format=yuv420p",
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-crf", "23",
+    "-movflags", "+faststart",
+    silent_video
+  ]
+
         r = subprocess.run(encode_cmd, capture_output=True, text=True, timeout=300)
         if r.returncode != 0:
             raise RuntimeError(f"Frame encoding failed: {r.stderr[-400:]}")
@@ -770,4 +768,4 @@ def list_clips():
 # ─── Entry ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000, threaded=
+    app.run(debug=True, host="0.0.0.0", port=5000, threaded=True)
