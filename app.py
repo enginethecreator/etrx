@@ -533,3 +533,7 @@ async def download_clip(filename: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(str(path), media_type="video/mp4", filename=filename)
+
+
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False, workers=1)
