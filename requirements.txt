@@ -1,5 +1,5 @@
-flask
-gunicorn
+fastApi
+uvicorn[standard]
 yt-dlp[default]
 opencv-python-headless
 pillow
