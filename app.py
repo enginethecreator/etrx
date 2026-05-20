@@ -1,5 +1,5 @@
 """
-ClipForge — YouTube Clip Intelligence & Production Engine
+ClipForge —- YouTube Clip Intelligence & Production Engine
 Flask app: subtitle extraction, transcript formatting, blueprint parsing, FFmpeg clip rendering, synthetic video assembly system.
 """
 
