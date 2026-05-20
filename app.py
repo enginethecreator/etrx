@@ -16,10 +16,11 @@ from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
 # ─── App Config ───────────────────────────────────────────────────────────────
-app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB
+app = Flask(title="Try", version="0.0.2")
+# app.config["MAX_CONTENT_LENGTH"] = 1000 * 1024 * 1024  # 500M
+BASE_DIR = Path(os.environ.get("BASE_DIR", "./downloads"))
+BASE_DIR.mkdir(parents=True, exist_ok=True)
 
-BASE_DIR   = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "outputs"
 TEMP_DIR   = BASE_DIR / "temp"
@@ -765,7 +766,4 @@ def list_clips():
     return jsonify(clips)
 
 
-# ─── Entry ────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000, threaded=True)
