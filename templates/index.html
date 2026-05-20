@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -28,460 +27,459 @@
     --sans:      'Syne', sans-serif;
   }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; }
 
-body {
-background: var(–bg);
-color: var(–text);
-font-family: var(–mono);
-font-size: 13px;
-line-height: 1.6;
-min-height: 100vh;
-}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
 
-/* ── GRID NOISE TEXTURE ── */
-body::before {
-content: ‘’;
-position: fixed; inset: 0;
-background-image:
-repeating-linear-gradient(0deg, transparent, transparent 24px, rgba(30,45,61,0.25) 24px, rgba(30,45,61,0.25) 25px),
-repeating-linear-gradient(90deg, transparent, transparent 24px, rgba(30,45,61,0.25) 24px, rgba(30,45,61,0.25) 25px);
-pointer-events: none;
-z-index: 0;
-}
+  /* ── GRID NOISE TEXTURE ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 24px, rgba(30,45,61,0.25) 24px, rgba(30,45,61,0.25) 25px),
+      repeating-linear-gradient(90deg, transparent, transparent 24px, rgba(30,45,61,0.25) 24px, rgba(30,45,61,0.25) 25px);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-/* ── HEADER ── */
-header {
-position: sticky; top: 0; z-index: 100;
-background: rgba(8,11,15,0.92);
-border-bottom: 1px solid var(–border);
-backdrop-filter: blur(12px);
-padding: 0 32px;
-display: flex; align-items: center; justify-content: space-between;
-height: 56px;
-}
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,11,15,0.92);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    padding: 0 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px;
+  }
 
-.logo {
-font-family: var(–sans);
-font-weight: 800;
-font-size: 18px;
-letter-spacing: -0.5px;
-color: var(–accent);
-display: flex; align-items: center; gap: 10px;
-}
+  .logo {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 10px;
+  }
 
-.logo-icon {
-width: 28px; height: 28px;
-background: var(–accent);
-clip-path: polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%, 30% 50%);
-}
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    clip-path: polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%, 30% 50%);
+  }
 
-.header-meta {
-font-size: 11px;
-color: var(–text3);
-letter-spacing: 0.5px;
-}
+  .header-meta {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
 
-/* ── MAIN LAYOUT ── */
-.container {
-position: relative; z-index: 1;
-max-width: 1280px;
-margin: 0 auto;
-padding: 32px 24px 80px;
-display: grid;
-grid-template-columns: 1fr 1fr;
-grid-template-rows: auto;
-gap: 20px;
-}
+  /* ── MAIN LAYOUT ── */
+  .container {
+    position: relative; z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+    gap: 20px;
+  }
 
-/* ── PANELS ── */
-.panel {
-background: var(–surface);
-border: 1px solid var(–border);
-border-radius: 8px;
-overflow: hidden;
-}
+  /* ── PANELS ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
 
-.panel.full-width { grid-column: 1 / -1; }
+  .panel.full-width { grid-column: 1 / -1; }
 
-.panel-header {
-padding: 14px 20px;
-border-bottom: 1px solid var(–border);
-display: flex; align-items: center; justify-content: space-between;
-background: var(–surface2);
-}
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface2);
+  }
 
-.panel-title {
-font-family: var(–sans);
-font-size: 11px;
-font-weight: 700;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–text2);
-display: flex; align-items: center; gap: 8px;
-}
+  .panel-title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text2);
+    display: flex; align-items: center; gap: 8px;
+  }
 
-.panel-title .dot {
-width: 6px; height: 6px;
-border-radius: 50%;
-background: var(–accent);
-}
+  .panel-title .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
 
-.panel-body { padding: 20px; }
+  .panel-body { padding: 20px; }
 
-/* ── INPUTS ── */
-.field { margin-bottom: 16px; }
-.field:last-child { margin-bottom: 0; }
+  /* ── INPUTS ── */
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
 
-label {
-display: block;
-font-size: 10px;
-font-weight: 500;
-letter-spacing: 1.5px;
-text-transform: uppercase;
-color: var(–text3);
-margin-bottom: 6px;
-}
+  label {
+    display: block;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 6px;
+  }
 
-input[type=“text”], input[type=“url”], textarea, select {
-width: 100%;
-background: var(–surface3);
-border: 1px solid var(–border);
-border-radius: 6px;
-color: var(–text);
-font-family: var(–mono);
-font-size: 13px;
-padding: 10px 14px;
-outline: none;
-transition: border-color 0.15s, box-shadow 0.15s;
-resize: vertical;
-}
+  input[type="text"], input[type="url"], textarea, select {
+    width: 100%;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    resize: vertical;
+  }
 
-input[type=“text”]:focus, input[type=“url”]:focus,
-textarea:focus, select:focus {
-border-color: var(–accent);
-box-shadow: 0 0 0 3px rgba(245,166,35,0.12);
-}
+  input[type="text"]:focus, input[type="url"]:focus,
+  textarea:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(245,166,35,0.12);
+  }
 
-textarea { min-height: 120px; }
+  textarea { min-height: 120px; }
 
-/* ── BUTTONS ── */
-.btn {
-display: inline-flex; align-items: center; gap: 8px;
-padding: 10px 20px;
-border-radius: 6px;
-border: none; cursor: pointer;
-font-family: var(–mono);
-font-size: 12px;
-font-weight: 500;
-letter-spacing: 0.5px;
-transition: all 0.15s;
-white-space: nowrap;
-}
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: none; cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
 
-.btn-primary {
-background: var(–accent);
-color: #000;
-}
-.btn-primary:hover { background: var(–accent2); transform: translateY(-1px); }
-.btn-primary:active { transform: translateY(0); }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
 
-.btn-ghost {
-background: transparent;
-border: 1px solid var(–border2);
-color: var(–text2);
-}
-.btn-ghost:hover { border-color: var(–accent); color: var(–accent); }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
-.btn-danger {
-background: rgba(248,81,73,0.15);
-border: 1px solid rgba(248,81,73,0.3);
-color: var(–red);
-}
+  .btn-danger {
+    background: rgba(248,81,73,0.15);
+    border: 1px solid rgba(248,81,73,0.3);
+    color: var(--red);
+  }
 
-.btn-sm { padding: 6px 12px; font-size: 11px; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+  .btn-sm { padding: 6px 12px; font-size: 11px; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
 
-/* ── PROGRESS BAR ── */
-.progress-wrap {
-background: var(–surface3);
-border: 1px solid var(–border);
-border-radius: 4px;
-height: 6px;
-overflow: hidden;
-margin: 12px 0 6px;
-}
+  /* ── PROGRESS BAR ── */
+  .progress-wrap {
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin: 12px 0 6px;
+  }
 
-.progress-bar {
-height: 100%;
-background: linear-gradient(90deg, var(–accent), #ffcc44);
-transition: width 0.4s ease;
-width: 0%;
-}
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #ffcc44);
+    transition: width 0.4s ease;
+    width: 0%;
+  }
 
-.status-line {
-font-size: 11px;
-color: var(–text2);
-min-height: 16px;
-}
+  .status-line {
+    font-size: 11px;
+    color: var(--text2);
+    min-height: 16px;
+  }
 
-.status-line.error { color: var(–red); }
-.status-line.success { color: var(–green); }
+  .status-line.error { color: var(--red); }
+  .status-line.success { color: var(--green); }
 
-/* ── TRANSCRIPT OUTPUT ── */
-.transcript-tabs {
-display: flex;
-border-bottom: 1px solid var(–border);
-background: var(–surface2);
-}
+  /* ── TRANSCRIPT OUTPUT ── */
+  .transcript-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
 
-.tab-btn {
-padding: 10px 20px;
-background: none; border: none;
-color: var(–text3);
-font-family: var(–mono);
-font-size: 11px;
-letter-spacing: 1px;
-text-transform: uppercase;
-cursor: pointer;
-border-bottom: 2px solid transparent;
-transition: all 0.15s;
-}
+  .tab-btn {
+    padding: 10px 20px;
+    background: none; border: none;
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
 
-.tab-btn.active {
-color: var(–accent);
-border-bottom-color: var(–accent);
-}
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
 
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
 
-.code-block {
-background: var(–bg);
-border: 1px solid var(–border);
-border-radius: 6px;
-padding: 14px;
-font-family: var(–mono);
-font-size: 12px;
-color: var(–text2);
-overflow: auto;
-max-height: 340px;
-white-space: pre-wrap;
-word-break: break-word;
-position: relative;
-line-height: 1.7;
-}
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    overflow: auto;
+    max-height: 340px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    position: relative;
+    line-height: 1.7;
+  }
 
-.copy-btn-overlay {
-position: absolute;
-top: 8px; right: 8px;
-}
+  .copy-btn-overlay {
+    position: absolute;
+    top: 8px; right: 8px;
+  }
 
-/* ── VIDEO INFO CARD ── */
-.video-card {
-display: flex; gap: 14px;
-padding: 14px;
-background: var(–surface3);
-border: 1px solid var(–border);
-border-radius: 6px;
-margin-bottom: 16px;
-}
+  /* ── VIDEO INFO CARD ── */
+  .video-card {
+    display: flex; gap: 14px;
+    padding: 14px;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
 
-.video-thumb {
-width: 96px; height: 54px;
-object-fit: cover;
-border-radius: 4px;
-flex-shrink: 0;
-background: var(–border);
-}
+  .video-thumb {
+    width: 96px; height: 54px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background: var(--border);
+  }
 
-.video-meta { flex: 1; min-width: 0; }
-.video-title {
-font-family: var(–sans);
-font-size: 13px;
-font-weight: 600;
-color: var(–text);
-white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-margin-bottom: 4px;
-}
-.video-sub { font-size: 11px; color: var(–text3); }
+  .video-meta { flex: 1; min-width: 0; }
+  .video-title {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .video-sub { font-size: 11px; color: var(--text3); }
 
-/* ── BLUEPRINT EDITOR ── */
-.blueprint-json {
-min-height: 260px;
-font-size: 12px;
-line-height: 1.8;
-}
+  /* ── BLUEPRINT EDITOR ── */
+  .blueprint-json {
+    min-height: 260px;
+    font-size: 12px;
+    line-height: 1.8;
+  }
 
-/* ── CLIP LIBRARY ── */
-.clip-list { display: flex; flex-direction: column; gap: 10px; }
+  /* ── CLIP LIBRARY ── */
+  .clip-list { display: flex; flex-direction: column; gap: 10px; }
 
-.clip-item {
-background: var(–surface3);
-border: 1px solid var(–border);
-border-radius: 6px;
-padding: 12px 16px;
-display: flex; align-items: center; justify-content: space-between;
-gap: 12px;
-}
+  .clip-item {
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
 
-.clip-info { flex: 1; min-width: 0; }
-.clip-name {
-font-size: 12px; font-weight: 500;
-white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-color: var(–text);
-}
-.clip-meta { font-size: 10px; color: var(–text3); margin-top: 2px; }
+  .clip-info { flex: 1; min-width: 0; }
+  .clip-name {
+    font-size: 12px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .clip-meta { font-size: 10px; color: var(--text3); margin-top: 2px; }
 
-/* ── BADGE ── */
-.badge {
-display: inline-flex; align-items: center;
-padding: 2px 8px;
-border-radius: 3px;
-font-size: 10px;
-font-weight: 500;
-letter-spacing: 0.5px;
-text-transform: uppercase;
-}
-.badge-orange { background: rgba(245,166,35,0.15); color: var(–accent); }
-.badge-green  { background: rgba(57,211,83,0.12);  color: var(–green); }
-.badge-purple { background: rgba(188,140,255,0.12); color: var(–purple); }
-.badge-blue   { background: rgba(88,166,255,0.12);  color: var(–blue); }
+  /* ── BADGE ── */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .badge-orange { background: rgba(245,166,35,0.15); color: var(--accent); }
+  .badge-green  { background: rgba(57,211,83,0.12);  color: var(--green); }
+  .badge-purple { background: rgba(188,140,255,0.12); color: var(--purple); }
+  .badge-blue   { background: rgba(88,166,255,0.12);  color: var(--blue); }
 
-/* ── SPINNER ── */
-.spinner {
-width: 14px; height: 14px;
-border: 2px solid rgba(245,166,35,0.2);
-border-top-color: var(–accent);
-border-radius: 50%;
-animation: spin 0.7s linear infinite;
-flex-shrink: 0;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+  /* ── SPINNER ── */
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(245,166,35,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── FILE DROP ZONE ── */
-.dropzone {
-border: 2px dashed var(–border2);
-border-radius: 6px;
-padding: 28px;
-text-align: center;
-cursor: pointer;
-transition: all 0.2s;
-color: var(–text3);
-font-size: 12px;
-}
-.dropzone:hover, .dropzone.drag-over {
-border-color: var(–accent);
-color: var(–accent);
-background: rgba(245,166,35,0.04);
-}
-.dropzone input { display: none; }
+  /* ── FILE DROP ZONE ── */
+  .dropzone {
+    border: 2px dashed var(--border2);
+    border-radius: 6px;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text3);
+    font-size: 12px;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(245,166,35,0.04);
+  }
+  .dropzone input { display: none; }
 
-/* ── SEGMENT ROW ── */
-.seg-row {
-display: grid;
-grid-template-columns: 120px 1fr;
-gap: 8px;
-padding: 6px 0;
-border-bottom: 1px solid rgba(30,45,61,0.6);
-font-size: 12px;
-}
-.seg-row:last-child { border-bottom: none; }
-.seg-ts { color: var(–blue); font-size: 11px; }
-.seg-txt { color: var(–text2); }
+  /* ── SEGMENT ROW ── */
+  .seg-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(30,45,61,0.6);
+    font-size: 12px;
+  }
+  .seg-row:last-child { border-bottom: none; }
+  .seg-ts { color: var(--blue); font-size: 11px; }
+  .seg-txt { color: var(--text2); }
 
-.seg-list {
-max-height: 320px;
-overflow-y: auto;
-padding: 0 4px;
-}
-.seg-list::-webkit-scrollbar { width: 4px; }
-.seg-list::-webkit-scrollbar-track { background: transparent; }
-.seg-list::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 2px; }
+  .seg-list {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 0 4px;
+  }
+  .seg-list::-webkit-scrollbar { width: 4px; }
+  .seg-list::-webkit-scrollbar-track { background: transparent; }
+  .seg-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-/* ── RENDER SECTION ── */
-.render-type-toggle {
-display: flex; gap: 8px; margin-bottom: 16px;
-}
-.toggle-opt {
-flex: 1; padding: 10px;
-border: 1px solid var(–border);
-border-radius: 6px;
-background: var(–surface3);
-color: var(–text2);
-font-family: var(–mono);
-font-size: 11px;
-letter-spacing: 1px;
-text-transform: uppercase;
-cursor: pointer;
-text-align: center;
-transition: all 0.15s;
-}
-.toggle-opt.active {
-border-color: var(–accent);
-color: var(–accent);
-background: rgba(245,166,35,0.06);
-}
+  /* ── RENDER SECTION ── */
+  .render-type-toggle {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .toggle-opt {
+    flex: 1; padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface3);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .toggle-opt.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(245,166,35,0.06);
+  }
 
-.conditional-field { display: none; }
-.conditional-field.visible { display: block; }
+  .conditional-field { display: none; }
+  .conditional-field.visible { display: block; }
 
-/* ── EMPTY STATE ── */
-.empty-state {
-text-align: center;
-padding: 40px 20px;
-color: var(–text3);
-font-size: 12px;
-}
-.empty-state .icon { font-size: 28px; margin-bottom: 12px; opacity: 0.4; }
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text3);
+    font-size: 12px;
+  }
+  .empty-state .icon { font-size: 28px; margin-bottom: 12px; opacity: 0.4; }
 
-/* ── TOAST ── */
-#toast {
-position: fixed; bottom: 24px; right: 24px;
-background: var(–surface2);
-border: 1px solid var(–border2);
-border-radius: 6px;
-padding: 12px 20px;
-font-size: 12px;
-z-index: 9999;
-transform: translateY(80px);
-opacity: 0;
-transition: all 0.3s cubic-bezier(.16,1,.3,1);
-max-width: 320px;
-}
-#toast.show { transform: translateY(0); opacity: 1; }
-#toast.success { border-color: var(–green); color: var(–green); }
-#toast.error   { border-color: var(–red);   color: var(–red); }
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 12px 20px;
+    font-size: 12px;
+    z-index: 9999;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(.16,1,.3,1);
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error   { border-color: var(--red);   color: var(--red); }
 
-/* ── SECTION DIVIDER ── */
-.section-label {
-font-size: 10px;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–text3);
-margin-bottom: 10px;
-display: flex; align-items: center; gap: 10px;
-}
-.section-label::after {
-content: ‘’;
-flex: 1;
-height: 1px;
-background: var(–border);
-}
+  /* ── SECTION DIVIDER ── */
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
 
-/* ── SCROLLBAR GLOBAL ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 3px; }
+  /* ── SCROLLBAR GLOBAL ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
-@media (max-width: 900px) {
-.container { grid-template-columns: 1fr; }
-.panel.full-width { grid-column: 1; }
-}
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+    .panel.full-width { grid-column: 1; }
+  }
 </style>
-
 </head>
 <body>
 
@@ -496,7 +494,6 @@ background: var(–border);
 <div class="container">
 
   <!-- ── PANEL 1: EXTRACT ─────────────────────────────────────────────────── -->
-
   <div class="panel">
     <div class="panel-header">
       <div class="panel-title"><span class="dot"></span>01 — EXTRACT</div>
@@ -511,29 +508,25 @@ background: var(–border);
         <span>↯</span> Extract Subtitles
       </button>
 
-```
-  <div class="progress-wrap" id="extract-progress-wrap" style="display:none">
-    <div class="progress-bar" id="extract-bar"></div>
-  </div>
-  <div class="status-line" id="extract-status"></div>
+      <div class="progress-wrap" id="extract-progress-wrap" style="display:none">
+        <div class="progress-bar" id="extract-bar"></div>
+      </div>
+      <div class="status-line" id="extract-status"></div>
 
-  <!-- Video card (populated after extraction) -->
-  <div id="video-card" style="display:none; margin-top:16px">
-    <div class="video-card">
-      <img id="vc-thumb" class="video-thumb" src="" alt="">
-      <div class="video-meta">
-        <div class="video-title" id="vc-title"></div>
-        <div class="video-sub" id="vc-sub"></div>
+      <!-- Video card (populated after extraction) -->
+      <div id="video-card" style="display:none; margin-top:16px">
+        <div class="video-card">
+          <img id="vc-thumb" class="video-thumb" src="" alt="">
+          <div class="video-meta">
+            <div class="video-title" id="vc-title"></div>
+            <div class="video-sub" id="vc-sub"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-</div>
-```
-
-  </div>
 
   <!-- ── PANEL 2: TRANSCRIPT OUTPUT ──────────────────────────────────────── -->
-
   <div class="panel">
     <div class="panel-header">
       <div class="panel-title"><span class="dot"></span>02 — TRANSCRIPT</div>
@@ -542,58 +535,54 @@ background: var(–border);
       </button>
     </div>
 
-```
-<div class="transcript-tabs" id="transcript-tabs" style="display:none">
-  <button class="tab-btn active" onclick="switchTab('full')">Full Text</button>
-  <button class="tab-btn" onclick="switchTab('structured')">Structured</button>
-  <button class="tab-btn" onclick="switchTab('raw')">Raw Segments</button>
-</div>
-
-<div id="tab-full" class="tab-content active">
-  <div class="panel-body" style="padding-top:12px">
-    <div id="full-text-empty" class="empty-state">
-      <div class="icon">◈</div>
-      Enter a YouTube URL and extract to see full transcript text here.
+    <div class="transcript-tabs" id="transcript-tabs" style="display:none">
+      <button class="tab-btn active" onclick="switchTab('full')">Full Text</button>
+      <button class="tab-btn" onclick="switchTab('structured')">Structured</button>
+      <button class="tab-btn" onclick="switchTab('raw')">Raw Segments</button>
     </div>
-    <div style="position:relative; display:none" id="full-text-wrap">
-      <div class="code-block" id="full-text-out"></div>
-      <div class="copy-btn-overlay">
-        <button class="btn btn-ghost btn-sm" onclick="copyText('full-text-out')">copy</button>
+
+    <div id="tab-full" class="tab-content active">
+      <div class="panel-body" style="padding-top:12px">
+        <div id="full-text-empty" class="empty-state">
+          <div class="icon">◈</div>
+          Enter a YouTube URL and extract to see full transcript text here.
+        </div>
+        <div style="position:relative; display:none" id="full-text-wrap">
+          <div class="code-block" id="full-text-out"></div>
+          <div class="copy-btn-overlay">
+            <button class="btn btn-ghost btn-sm" onclick="copyText('full-text-out')">copy</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
-<div id="tab-structured" class="tab-content">
-  <div class="panel-body" style="padding-top:12px">
-    <div id="structured-empty" class="empty-state">
-      <div class="icon">◈</div>
-      Structured transcript (merged sentence-level segments with timestamps) appears here.
-    </div>
-    <div style="display:none; position:relative" id="structured-wrap">
-      <div class="copy-btn-overlay" style="top:0">
-        <button class="btn btn-ghost btn-sm" onclick="copyText('structured-json-out')">copy JSON</button>
+    <div id="tab-structured" class="tab-content">
+      <div class="panel-body" style="padding-top:12px">
+        <div id="structured-empty" class="empty-state">
+          <div class="icon">◈</div>
+          Structured transcript (merged sentence-level segments with timestamps) appears here.
+        </div>
+        <div style="display:none; position:relative" id="structured-wrap">
+          <div class="copy-btn-overlay" style="top:0">
+            <button class="btn btn-ghost btn-sm" onclick="copyText('structured-json-out')">copy JSON</button>
+          </div>
+          <div class="code-block" id="structured-json-out" style="padding-top:36px"></div>
+        </div>
       </div>
-      <div class="code-block" id="structured-json-out" style="padding-top:36px"></div>
     </div>
-  </div>
-</div>
 
-<div id="tab-raw" class="tab-content">
-  <div class="panel-body" style="padding-top:12px">
-    <div id="raw-empty" class="empty-state">
-      <div class="icon">◈</div>
-      Raw word-group segments from yt-dlp appear here.
+    <div id="tab-raw" class="tab-content">
+      <div class="panel-body" style="padding-top:12px">
+        <div id="raw-empty" class="empty-state">
+          <div class="icon">◈</div>
+          Raw word-group segments from yt-dlp appear here.
+        </div>
+        <div class="seg-list" id="raw-seg-list" style="display:none"></div>
+      </div>
     </div>
-    <div class="seg-list" id="raw-seg-list" style="display:none"></div>
-  </div>
-</div>
-```
-
   </div>
 
   <!-- ── PANEL 3: RENDER ──────────────────────────────────────────────────── -->
-
   <div class="panel">
     <div class="panel-header">
       <div class="panel-title"><span class="dot"></span>03 — RENDER CLIP</div>
@@ -601,81 +590,74 @@ background: var(–border);
     </div>
     <div class="panel-body">
 
-```
-  <div class="render-type-toggle">
-    <div class="toggle-opt active" id="tog-sliced" onclick="setRenderType('sliced')">
-      ✂ Sliced
-    </div>
-    <div class="toggle-opt" id="tog-synthetic" onclick="setRenderType('synthetic')">
-      ✦ Synthetic
-    </div>
-  </div>
-
-  <!-- SLICED fields -->
-  <div id="sliced-fields">
-    <div class="field">
-      <label>Video URL (source)</label>
-      <input type="url" id="render-url" placeholder="https://www.youtube.com/watch?v=…">
-    </div>
-  </div>
-
-  <!-- SYNTHETIC fields -->
-  <div id="synthetic-fields" style="display:none">
-    <div class="section-label">Assets</div>
-    <div class="field">
-      <label>Scene Images (one per scene, in order)</label>
-      <div class="dropzone" id="img-drop" onclick="document.getElementById('img-input').click()">
-        <input type="file" id="img-input" accept="image/*" multiple onchange="handleImageDrop(event)">
-        <div>Drop images or click to select</div>
-        <div id="img-count" style="margin-top:6px; color:var(--accent)"></div>
+      <div class="render-type-toggle">
+        <div class="toggle-opt active" id="tog-sliced" onclick="setRenderType('sliced')">
+          ✂ Sliced
+        </div>
+        <div class="toggle-opt" id="tog-synthetic" onclick="setRenderType('synthetic')">
+          ✦ Synthetic
+        </div>
       </div>
-    </div>
-    <div class="field">
-      <label>Voice-over Audio (WAV / MP3)</label>
-      <div class="dropzone" id="audio-drop" onclick="document.getElementById('audio-input').click()">
-        <input type="file" id="audio-input" accept="audio/*" onchange="handleAudioDrop(event)">
-        <div>Drop audio or click to select</div>
-        <div id="audio-name" style="margin-top:6px; color:var(--accent)"></div>
+
+      <!-- SLICED fields -->
+      <div id="sliced-fields">
+        <div class="field">
+          <label>Video URL (source)</label>
+          <input type="url" id="render-url" placeholder="https://www.youtube.com/watch?v=…">
+        </div>
       </div>
+
+      <!-- SYNTHETIC fields -->
+      <div id="synthetic-fields" style="display:none">
+        <div class="section-label">Assets</div>
+        <div class="field">
+          <label>Scene Images (one per scene, in order)</label>
+          <div class="dropzone" id="img-drop" onclick="document.getElementById('img-input').click()">
+            <input type="file" id="img-input" accept="image/*" multiple onchange="handleImageDrop(event)">
+            <div>Drop images or click to select</div>
+            <div id="img-count" style="margin-top:6px; color:var(--accent)"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Voice-over Audio (WAV / MP3)</label>
+          <div class="dropzone" id="audio-drop" onclick="document.getElementById('audio-input').click()">
+            <input type="file" id="audio-input" accept="audio/*" onchange="handleAudioDrop(event)">
+            <div>Drop audio or click to select</div>
+            <div id="audio-name" style="margin-top:6px; color:var(--accent)"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blueprint JSON -->
+      <div class="field">
+        <label>Clip Blueprint JSON (single clip object)</label>
+        <textarea class="blueprint-json" id="blueprint-input" placeholder='{
+  "content_generation_type": "SLICED_FROM_SOURCE",
+  "target_platform": "YouTube Shorts",
+  "timestamp_start": "00:01:32.000",
+  "timestamp_end": "00:01:55.200",
+  "hook_text_overlay": "Your family cannot recover a single Satoshi",
+  "publishing_metadata": {
+    "title": "If You Died Tomorrow Could Your Family Access Your Crypto?",
+    "description": "...",
+    "tags": ["crypto", "XRP"]
+  }
+}'></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="startRender()">
+        <span>⬡</span> Render Clip
+      </button>
+
+      <div class="progress-wrap" id="render-progress-wrap" style="display:none">
+        <div class="progress-bar" id="render-bar"></div>
+      </div>
+      <div class="status-line" id="render-status"></div>
+
     </div>
-  </div>
-
-  <!-- Blueprint JSON -->
-  <div class="field">
-    <label>Clip Blueprint JSON (single clip object)</label>
-    <textarea class="blueprint-json" id="blueprint-input" placeholder='{
-```
-
-“content_generation_type”: “SLICED_FROM_SOURCE”,
-“target_platform”: “YouTube Shorts”,
-“timestamp_start”: “00:01:32.000”,
-“timestamp_end”: “00:01:55.200”,
-“hook_text_overlay”: “Your family cannot recover a single Satoshi”,
-“publishing_metadata”: {
-“title”: “If You Died Tomorrow Could Your Family Access Your Crypto?”,
-“description”: “…”,
-“tags”: [“crypto”, “XRP”]
-}
-}’></textarea>
-</div>
-
-```
-  <button class="btn btn-primary" onclick="startRender()">
-    <span>⬡</span> Render Clip
-  </button>
-
-  <div class="progress-wrap" id="render-progress-wrap" style="display:none">
-    <div class="progress-bar" id="render-bar"></div>
-  </div>
-  <div class="status-line" id="render-status"></div>
-
-</div>
-```
-
   </div>
 
   <!-- ── PANEL 4: CLIP LIBRARY ─────────────────────────────────────────────── -->
-
   <div class="panel">
     <div class="panel-header">
       <div class="panel-title"><span class="dot"></span>04 — CLIP LIBRARY</div>
@@ -694,7 +676,6 @@ background: var(–border);
 </div>
 
 <!-- Toast -->
-
 <div id="toast"></div>
 
 <script>
@@ -1007,6 +988,5 @@ loadClips();
   });
 });
 </script>
-
 </body>
 </html>
