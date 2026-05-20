@@ -1,18 +1,10 @@
 services:
   - type: web
     name: clipforge
-    runtime: python
+    env: docker
     plan: starter
     autoDeploy: true
 
-    buildCommand: |
-      pip install -r requirements.txt
-
-    startCommand: |
-      uvicorn app:app --host 0.0.0.0 --port $POR
+    dockerfilePath: ./Dockerfile
 
     healthCheckPath: /
-
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12
