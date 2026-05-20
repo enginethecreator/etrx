@@ -21,6 +21,9 @@ RUN mkdir -p /opt/ffmpeg \
     && curl -L https://johnvansickle.com | tar -xJ -C /opt/ffmpeg --strip-components=1 \
     && ln -s /opt/ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
     && ln -s /opt/ffmpeg/ffprobe /usr/local/bin/ffprobe
+# Install Deno runtime securely for yt-dlp-ejs
+RUN curl -fsSL https://deno.land | sh
+
 
 # Copy dependency manifests first for layer caching
 COPY requirements.txt .
@@ -39,14 +42,14 @@ RUN mkdir -p uploads outputs temp templates static
 RUN python - <<'PY'
 import shutil
 
-required = ["ffmpeg", "ffprobe", "yt-dlp"]
+required = ["ffmpeg", "ffprobe", "yt-dlp", "deno"]
 
 missing = [x for x in required if not shutil.which(x)]
 
 if missing:
     raise RuntimeError(f"Missing binaries: {missing}")
 
-print("All runtime binaries available.")
+print("All runtime binaries available. Deno successfully mapped for yt-dlp.")
 PY
 
 EXPOSE 10000
