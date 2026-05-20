@@ -4,3 +4,4 @@ yt-dlp[default]
 opencv-python-headless
 pillow
 numpy
+pydantic
