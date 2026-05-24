@@ -5,35 +5,26 @@ import uuid
 import threading
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
 from pydantic import BaseModel
-import uvicorn
 
 # ---------------------------------------------------------------------------
-# STARTUP
+# STARTUP — directories + font resolution
 # ---------------------------------------------------------------------------
-app = FastAPI(title="ClipForge")
+BASE_DIR = Path(__file__).parent
+for d in ["uploads", "outputs", "temp"]:
+    (BASE_DIR / d).mkdir(exist_ok=True)
 
-for folder in ["uploads", "outputs", "temp", "templates"]:
-    Path(folder).mkdir(exist_ok=True)
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-templates = Jinja2Templates(directory="templates")
-
-FPS = 30
-W, H = 1080, 1920
-
-# ---------------------------------------------------------------------------
-# FONT RESOLUTION — never hardcoded
-# ---------------------------------------------------------------------------
-_FONT_CANDIDATES = [
+KNOWN_FONT_PATHS = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
@@ -43,49 +34,33 @@ _FONT_CANDIDATES = [
     "/Library/Fonts/Arial Bold.ttf",
 ]
 
-RESOLVED_FONT_PATH: Optional[str] = None
-for _fp in _FONT_CANDIDATES:
-    if os.path.exists(_fp):
-        RESOLVED_FONT_PATH = _fp
-        break
-
-
-def find_font(size: int = 48) -> ImageFont.FreeTypeFont:
-    if RESOLVED_FONT_PATH:
-        try:
-            return ImageFont.truetype(RESOLVED_FONT_PATH, size)
-        except Exception:
-            pass
+def find_font(size: int = 48):
+    for path in KNOWN_FONT_PATHS:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
     return ImageFont.load_default()
 
+FONT_CAPTION = find_font(44)
+FONT_HOOK    = find_font(56)
+FONT_PATH_RESOLVED = next((p for p in KNOWN_FONT_PATHS if os.path.exists(p)), "")
+
+app = FastAPI(title="ClipForge")
 
 # ---------------------------------------------------------------------------
 # IN-MEMORY JOB STORE
 # ---------------------------------------------------------------------------
-JOBS: Dict[str, Dict[str, Any]] = {}
+JOBS: dict = {}
 
-
-def new_job() -> str:
-    job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"state": "running", "result": None, "error": None}
-    return job_id
-
-
-def job_done(job_id: str, result: Any):
-    JOBS[job_id]["state"] = "done"
-    JOBS[job_id]["result"] = result
-
-
-def job_error(job_id: str, msg: str):
-    JOBS[job_id]["state"] = "error"
-    JOBS[job_id]["error"] = msg
-
+def job_set(job_id: str, state: str, data: dict = None, error: str = None):
+    JOBS[job_id] = {"state": state, "data": data or {}, "error": error}
 
 # ---------------------------------------------------------------------------
 # SUBTITLE UTILS
 # ---------------------------------------------------------------------------
 SENTENCE_ENDERS = {'.', '?', '!', '"', '\u201d'}
-
 
 def seconds_to_ts(s: float) -> str:
     s = round(s, 3)
@@ -94,212 +69,202 @@ def seconds_to_ts(s: float) -> str:
     sec = s % 60
     return f"{h:02d}:{m:02d}:{sec:06.3f}"
 
-
-def ts_to_seconds(ts: str) -> float:
-    parts = ts.split(":")
-    h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
-    return h * 3600 + m * 60 + s
-
-
-def parse_json3(data: dict) -> list:
+def parse_vtt(vtt_text: str) -> list:
     segs = []
-    for event in data.get("events", []):
-        start_ms = event.get("tStartMs", 0)
-        dur_ms = event.get("dDurationMs", 0)
-        text = "".join(s.get("utf8", "") for s in event.get("segs", [])).strip()
-        if text and text != "\n":
-            segs.append({"start": start_ms / 1000.0, "duration": dur_ms / 1000.0, "text": text})
-    return segs
-
-
-def parse_vtt(content: str) -> list:
-    segs = []
-    time_re = re.compile(r"(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})")
-    lines = content.splitlines()
+    time_re = re.compile(r"(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})")
+    tag_re  = re.compile(r"<[^>]+>")
+    lines = vtt_text.splitlines()
     i = 0
     while i < len(lines):
         m = time_re.search(lines[i])
         if m:
-            start = ts_to_seconds(m.group(1))
-            end = ts_to_seconds(m.group(2))
+            def ts_to_sec(ts):
+                h, mn, s = ts.split(":")
+                return int(h)*3600 + int(mn)*60 + float(s)
+            s_start = ts_to_sec(m.group(1))
+            s_end   = ts_to_sec(m.group(2))
             i += 1
             text_parts = []
             while i < len(lines) and lines[i].strip() and not time_re.search(lines[i]):
-                clean = re.sub(r"<[^>]+>", "", lines[i]).strip()
+                clean = tag_re.sub("", lines[i]).strip()
                 if clean:
                     text_parts.append(clean)
                 i += 1
-            text = " ".join(text_parts).strip()
-            if text:
-                segs.append({"start": start, "duration": end - start, "text": text})
+            if text_parts:
+                segs.append({
+                    "start": s_start,
+                    "duration": s_end - s_start,
+                    "text": " ".join(text_parts)
+                })
         else:
             i += 1
     return segs
 
+def parse_json3(j3: dict) -> list:
+    segs = []
+    for event in j3.get("events", []):
+        if "segs" not in event:
+            continue
+        start = event.get("tStartMs", 0) / 1000.0
+        dur   = event.get("dDurationMs", 0) / 1000.0
+        text  = "".join(s.get("utf8", "") for s in event["segs"]).replace("\n", " ").strip()
+        if text:
+            segs.append({"start": start, "duration": dur, "text": text})
+    return segs
 
-def merge_segments(raw_segs: list) -> list:
+def merge_to_sentences(segments: list) -> list:
     merged = []
     current = None
-    for i, seg in enumerate(raw_segs):
-        s_start = seg["start"]
-        s_end = round(seg["start"] + seg["duration"], 3)
-        s_text = seg["text"].strip()
-        if not s_text:
+    for seg in segments:
+        s = seg["start"]
+        e = round(seg["start"] + seg["duration"], 3)
+        t = seg["text"].strip()
+        if not t:
             continue
         if current is None:
-            current = {"start": s_start, "end": s_end, "text": s_text}
+            current = {"start": s, "end": e, "text": t}
             continue
-        overlap = s_start < current["end"]
-        last_char = current["text"].rstrip()[-1] if current["text"].rstrip() else ""
+        overlap       = s < current["end"]
+        chunk_dur     = current["end"] - current["start"]
+        last_char     = current["text"].rstrip()[-1] if current["text"].rstrip() else ""
         ends_sentence = last_char in SENTENCE_ENDERS
-        chunk_duration = current["end"] - current["start"]
-        next_start = raw_segs[i + 1]["start"] if i + 1 < len(raw_segs) else current["end"] + 99
-        no_overlap_next = next_start >= current["end"]
-        if ends_sentence and chunk_duration >= 3.0 and no_overlap_next and not overlap:
-            merged.append({
-                "start": seconds_to_ts(current["start"]),
-                "end": seconds_to_ts(current["end"]),
-                "text": current["text"],
-            })
-            current = {"start": s_start, "end": s_end, "text": s_text}
+        if ends_sentence and not overlap and chunk_dur >= 3.0:
+            merged.append(current)
+            current = {"start": s, "end": e, "text": t}
         else:
-            current["end"] = max(current["end"], s_end)
-            current["text"] += " " + s_text
+            current["end"]  = max(current["end"], e)
+            current["text"] += " " + t
     if current:
-        merged.append({
-            "start": seconds_to_ts(current["start"]),
-            "end": seconds_to_ts(current["end"]),
-            "text": current["text"],
-        })
-    return merged
-
+        merged.append(current)
+    return [
+        {"start": seconds_to_ts(c["start"]), "end": seconds_to_ts(c["end"]), "text": c["text"]}
+        for c in merged
+    ]
 
 # ---------------------------------------------------------------------------
 # EXTRACT WORKER
 # ---------------------------------------------------------------------------
 def extract_worker(job_id: str, url: str):
     try:
-        tmp_dir = Path(f"temp/extract_{job_id}")
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-
-        meta_result = subprocess.run(
-            ["yt-dlp", "--dump-json", "--no-playlist", url],
-            capture_output=True, text=True, check=True
-        )
-        meta = json.loads(meta_result.stdout.strip().splitlines()[0])
-
+        meta_cmd = ["yt-dlp", "--dump-json", "--no-playlist", url]
+        meta_res = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
+        if meta_res.returncode != 0:
+            raise RuntimeError(f"yt-dlp metadata failed: {meta_res.stderr[:300]}")
+        meta     = json.loads(meta_res.stdout.strip().splitlines()[-1])
         video_id = meta.get("id", "unknown")
-        title = meta.get("title", "Unknown")
-        duration = meta.get("duration_string", "?")
-        thumbnail = meta.get("thumbnail", "")
-        uploader = meta.get("uploader", "Unknown")
+        title    = meta.get("title", "")
+        duration = meta.get("duration_string", "")
+        thumb    = meta.get("thumbnail", "")
 
-        sub_base = str(tmp_dir / f"sub_{video_id}")
-        raw_segs = []
+        sub_base = str(BASE_DIR / "temp" / f"sub_{job_id}")
+        segments = []
 
         # json3 first
-        subprocess.run([
+        j3_cmd = [
             "yt-dlp", "--write-auto-subs", "--sub-langs", "en",
             "--sub-format", "json3", "--skip-download",
-            "--output", sub_base, url,
-        ], capture_output=True)
-
-        j3_file = Path(f"{sub_base}.en.json3")
-        if j3_file.exists():
+            "--output", sub_base, url
+        ]
+        subprocess.run(j3_cmd, capture_output=True, timeout=60)
+        j3_file = f"{sub_base}.en.json3"
+        if os.path.exists(j3_file):
             with open(j3_file, "r", encoding="utf-8") as f:
-                raw_segs = parse_json3(json.load(f))
-            j3_file.unlink(missing_ok=True)
-        else:
-            # VTT fallback
-            subprocess.run([
+                segments = parse_json3(json.load(f))
+            os.remove(j3_file)
+
+        # VTT fallback
+        if not segments:
+            vtt_cmd = [
                 "yt-dlp", "--write-auto-subs", "--sub-langs", "en",
                 "--sub-format", "vtt", "--skip-download",
-                "--output", sub_base, url,
-            ], capture_output=True)
-            vtt_file = Path(f"{sub_base}.en.vtt")
-            if vtt_file.exists():
+                "--output", sub_base, url
+            ]
+            subprocess.run(vtt_cmd, capture_output=True, timeout=60)
+            vtt_file = f"{sub_base}.en.vtt"
+            if os.path.exists(vtt_file):
                 with open(vtt_file, "r", encoding="utf-8") as f:
-                    raw_segs = parse_vtt(f.read())
-                vtt_file.unlink(missing_ok=True)
+                    segments = parse_vtt(f.read())
+                os.remove(vtt_file)
 
-        for f in tmp_dir.iterdir():
-            f.unlink(missing_ok=True)
-        tmp_dir.rmdir()
+        if not segments:
+            raise RuntimeError("No subtitles found — json3 and VTT both failed")
 
-        full_text = " ".join(s["text"] for s in raw_segs)
-        transcript = merge_segments(raw_segs)
+        full_text  = " ".join(s["text"] for s in segments)
+        transcript = merge_to_sentences(segments)
 
-        job_done(job_id, {
+        job_set(job_id, "done", {
             "video_id": video_id,
             "title": title,
             "duration": duration,
-            "thumbnail": thumbnail,
-            "uploader": uploader,
+            "thumbnail": thumb,
             "full_text": full_text,
-            "segments": raw_segs,
+            "segments": segments,
             "transcript": transcript,
         })
-    except Exception as e:
-        job_error(job_id, str(e))
-
+    except Exception as ex:
+        job_set(job_id, "error", error=str(ex))
 
 # ---------------------------------------------------------------------------
 # RENDER — SLICED_FROM_SOURCE WORKER
 # ---------------------------------------------------------------------------
 def render_sliced_worker(job_id: str, url: str, blueprint: dict):
+    raw_path = str(BASE_DIR / "temp" / f"raw_{job_id}.mp4")
+    out_path = str(BASE_DIR / "outputs" / f"{job_id}.mp4")
     try:
-        ts_start = blueprint.get("timestamp_start", "00:00:00.000")
-        ts_end = blueprint.get("timestamp_end", "00:00:30.000")
-        hook_text = blueprint.get("hook_text_overlay", "")
+        dl_cmd = [
+            "yt-dlp", "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]",
+            "--output", raw_path, "--no-playlist", url
+        ]
+        subprocess.run(dl_cmd, check=True, capture_output=True, timeout=600)
 
-        raw_path = Path(f"temp/raw_{job_id}.mp4")
-        output_path = Path(f"outputs/clip_{job_id}.mp4")
+        ts_start     = blueprint["timestamp_start"]
+        ts_end       = blueprint["timestamp_end"]
+        hook         = blueprint.get("hook_text_overlay", "")[:50]
+        hook_escaped = hook.replace("'", "\\'").replace(":", "\\:").replace("\\", "\\\\")
 
-        subprocess.run([
-            "yt-dlp",
-            "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]",
-            "--output", str(raw_path),
-            url,
-        ], check=True, capture_output=True)
-
-        safe_hook = hook_text.replace("'", "\\'").replace(":", "\\:").replace("\\", "\\\\")
-        font_arg = f":fontfile={RESOLVED_FONT_PATH}" if RESOLVED_FONT_PATH else ""
         drawtext = (
-            f"drawtext=text='{safe_hook}'"
-            f"{font_arg}"
-            f":fontsize=52:fontcolor=white:borderw=4:bordercolor=black"
-            f":x=(w-text_w)/2:y=h*0.12:enable='lte(t\\,5)'"
+            f"drawtext=text='{hook_escaped}'"
+            f":fontsize=54:fontcolor=white:borderw=3:bordercolor=black"
+            f":x=(w-text_w)/2:y=h*0.12"
+            f":enable='lt(t\\,5)'"
         )
+        if FONT_PATH_RESOLVED:
+            drawtext += f":fontfile='{FONT_PATH_RESOLVED}'"
 
-        subprocess.run([
+        ffmpeg_cmd = [
             "ffmpeg", "-y",
-            "-i", str(raw_path),
-            "-ss", ts_start,
-            "-to", ts_end,
+            "-i", raw_path,
+            "-ss", ts_start, "-to", ts_end,
             "-vf", f"crop=ih*9/16:ih,scale=1080:1920,{drawtext}",
             "-c:v", "libx264", "-profile:v", "main", "-level:v", "4.0",
             "-c:a", "aac", "-b:a", "192k",
             "-avoid_negative_ts", "make_zero",
             "-movflags", "+faststart",
-            str(output_path),
-        ], check=True, capture_output=True)
-
-        raw_path.unlink(missing_ok=True)
-        job_done(job_id, {"output_file": output_path.name, "type": "sliced"})
-    except Exception as e:
-        job_error(job_id, str(e))
-
+            out_path
+        ]
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, timeout=300)
+        job_set(job_id, "done", {"output": f"{job_id}.mp4", "type": "sliced"})
+    except subprocess.CalledProcessError as ex:
+        job_set(job_id, "error", error=(ex.stderr.decode()[-400:] if ex.stderr else str(ex)))
+    except Exception as ex:
+        job_set(job_id, "error", error=str(ex))
+    finally:
+        if os.path.exists(raw_path):
+            os.remove(raw_path)
 
 # ---------------------------------------------------------------------------
-# TEXT WRAPPING — pixel-boundary only
+# RENDER — SYNTHETIC_FROM_SCRATCH WORKER
 # ---------------------------------------------------------------------------
-def wrap_text_pixel(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list:
+W, H, FPS = 1080, 1920, 30
+
+def wrap_text_pixels(text: str, font, max_px: int) -> list:
+    dummy = Image.new("RGB", (1, 1))
+    draw  = ImageDraw.Draw(dummy)
     words = text.split()
-    lines = []
-    current = ""
+    lines, current = [], ""
     for word in words:
         test = (current + " " + word).strip()
-        if draw.textlength(test, font=font) <= max_width:
+        if draw.textlength(test, font=font) <= max_px:
             current = test
         else:
             if current:
@@ -309,238 +274,219 @@ def wrap_text_pixel(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTy
         lines.append(current)
     return lines
 
-
-# ---------------------------------------------------------------------------
-# RENDER — SYNTHETIC_FROM_SCRATCH WORKER
-# ---------------------------------------------------------------------------
-def render_synthetic_worker(job_id: str, image_paths: list, audio_path: str, blueprint: dict):
+def get_audio_duration(path: str) -> float:
+    cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path]
+    res = subprocess.run(cmd, capture_output=True, text=True)
     try:
-        hook_text = blueprint.get("hook_text_overlay", "")
-        script = blueprint.get("asset_assembly_instructions", {}).get("text_to_speech_script", "") or ""
-        output_path = Path(f"outputs/clip_{job_id}.mp4")
-        silent_path = Path(f"temp/silent_{job_id}.mp4")
+        data = json.loads(res.stdout)
+        for stream in data.get("streams", []):
+            dur = stream.get("duration")
+            if dur:
+                return float(dur)
+    except Exception:
+        pass
+    return 0.0
 
-        # Audio duration via ffprobe
-        probe = subprocess.run([
-            "ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", audio_path,
-        ], capture_output=True, text=True, check=True)
-        D_master = float(json.loads(probe.stdout)["format"]["duration"])
+def render_synthetic_worker(job_id: str, image_paths: list, audio_path: str, blueprint: dict):
+    silent_path = str(BASE_DIR / "temp" / f"silent_{job_id}.mp4")
+    out_path    = str(BASE_DIR / "outputs" / f"{job_id}.mp4")
+    try:
+        hook     = blueprint.get("hook_text_overlay", "")[:50]
+        script   = blueprint.get("asset_assembly_instructions", {}).get("text_to_speech_script", "")
+        D_master = get_audio_duration(audio_path)
+        if D_master <= 0:
+            raise RuntimeError("ffprobe could not determine audio duration")
 
-        N_scenes = len(image_paths)
-        all_words = script.split()
-        W_total = max(len(all_words), N_scenes)
+        n_scenes = len(image_paths)
+        words    = script.split()
+        W_total  = max(len(words), 1)
 
-        scene_configs = []
-        for i, img_path in enumerate(image_paths):
-            w_start = int(i * W_total / N_scenes)
-            w_end = int((i + 1) * W_total / N_scenes) if i < N_scenes - 1 else W_total
-            w_scene = max(1, w_end - w_start)
-            D_scene = (w_scene / W_total) * D_master
-            F_scene = max(1, int(D_scene * FPS))
-            scene_configs.append({
-                "img_path": img_path,
-                "frames": F_scene,
-                "word_start": w_start,
-                "word_end": w_end,
-                "duration": D_scene,
-            })
+        # Proportional word count per scene
+        base = W_total // n_scenes
+        rem  = W_total % n_scenes
+        scene_word_counts = [base + (1 if i < rem else 0) for i in range(n_scenes)]
 
-        font_caption = find_font(42)
-        font_hook = find_font(58)
-
-        total_frames = sum(s["frames"] for s in scene_configs)
-
-        # Open FFmpeg stdin pipe — zero disk I/O for frames
-        pipe = subprocess.Popen([
+        # Open FFmpeg pipe
+        pipe_cmd = [
             "ffmpeg", "-y",
             "-f", "rawvideo", "-vcodec", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{W}x{H}",
-            "-r", str(FPS),
-            "-i", "-",
-            "-c:v", "libx264",
-            "-profile:v", "main", "-level:v", "4.0",
-            "-pix_fmt", "yuv420p",
+            "-pix_fmt", "bgr24", "-s", f"{W}x{H}",
+            "-r", str(FPS), "-i", "-",
+            "-an",
+            "-c:v", "libx264", "-profile:v", "main", "-level:v", "4.0",
             "-movflags", "+faststart",
-            str(silent_path),
-        ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            silent_path
+        ]
+        proc = subprocess.Popen(
+            pipe_cmd, stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
 
         global_frame = 0
+        word_idx     = 0
 
-        for scene in scene_configs:
-            img = Image.open(scene["img_path"]).convert("RGB")
-            iw, ih = img.size
-            target_ar = W / H
-            src_ar = iw / ih
-            if src_ar > target_ar:
-                cw = int(ih * target_ar)
-                ch = ih
-            else:
-                cw = iw
-                ch = int(iw / target_ar)
-            cx, cy = iw // 2, ih // 2
-            img_cropped = img.crop((cx - cw // 2, cy - ch // 2, cx + cw // 2, cy + ch // 2))
-            img_base = np.array(img_cropped.resize((W, H), Image.LANCZOS))
+        for scene_i, img_path in enumerate(image_paths):
+            w_scene  = scene_word_counts[scene_i]
+            D_scene  = (w_scene / W_total) * D_master
+            N_frames = max(int(D_scene * FPS), 1)
 
-            N_frames = scene["frames"]
-            scene_words = all_words[scene["word_start"]:scene["word_end"]]
-            words_per_frame = len(scene_words) / max(N_frames, 1)
+            img_bgr = cv2.imread(img_path)
+            if img_bgr is None:
+                img_bgr = np.zeros((H, W, 3), dtype=np.uint8)
+            img_bgr = cv2.resize(img_bgr, (W, H), interpolation=cv2.INTER_LANCZOS4)
+
+            scene_words  = words[word_idx: word_idx + w_scene]
+            word_idx    += w_scene
+            caption_text = " ".join(scene_words)
 
             for f in range(N_frames):
-                # Ken Burns zoom: S(t) = 1.0 + 0.15 * f/(N-1)
-                scale = 1.0 + (0.15 * f / max(N_frames - 1, 1))
-                nw, nh = int(W * scale), int(H * scale)
-                zoomed = cv2.resize(img_base, (nw, nh), interpolation=cv2.INTER_LINEAR)
-                ox, oy = (nw - W) // 2, (nh - H) // 2
-                frame_bgr = zoomed[oy:oy + H, ox:ox + W]
+                # Ken Burns
+                scale  = 1.0 + (0.15 * f / max(N_frames - 1, 1))
+                new_w  = int(W * scale)
+                new_h  = int(H * scale)
+                scaled = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                cx     = (new_w - W) // 2
+                cy     = (new_h - H) // 2
+                frame_bgr = scaled[cy:cy+H, cx:cx+W].copy()
 
                 frame_pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
-                draw = ImageDraw.Draw(frame_pil)
+                draw      = ImageDraw.Draw(frame_pil)
 
-                # Z2: hook banner — first 5 seconds globally
-                if (global_frame / FPS) <= 5.0:
-                    hook_lines = wrap_text_pixel(draw, hook_text, font_hook, int(W * 0.85))
-                    hy = int(H * 0.12)
+                # Z1: captions at y=0.75*H — yellow, 8pt stroke
+                cap_lines  = wrap_text_pixels(caption_text, FONT_CAPTION, W - 80)
+                cap_line_h = FONT_CAPTION.size + 8
+                cap_y      = int(H * 0.75)
+                for line in cap_lines:
+                    tw = draw.textlength(line, font=FONT_CAPTION)
+                    tx = (W - tw) / 2
+                    for dx in range(-4, 5, 4):
+                        for dy in range(-4, 5, 4):
+                            if dx != 0 or dy != 0:
+                                draw.text((tx+dx, cap_y+dy), line, font=FONT_CAPTION, fill=(0,0,0))
+                    draw.text((tx, cap_y), line, font=FONT_CAPTION, fill=(255, 255, 0))
+                    cap_y += cap_line_h
+
+                # Z2: hook banner — white, first 5s globally
+                global_t = global_frame / FPS
+                if global_t < 5.0:
+                    hook_lines  = wrap_text_pixels(hook, FONT_HOOK, W - 80)
+                    hook_line_h = FONT_HOOK.size + 10
+                    hook_y      = int(H * 0.12)
                     for line in hook_lines:
-                        bb = draw.textbbox((0, 0), line, font=font_hook)
-                        lw = bb[2] - bb[0]
-                        lx = (W - lw) // 2
-                        draw.text((lx, hy), line, font=font_hook, fill="white",
-                                  stroke_width=5, stroke_fill="black")
-                        hy += bb[3] - bb[1] + 6
+                        tw = draw.textlength(line, font=FONT_HOOK)
+                        tx = (W - tw) / 2
+                        for dx in range(-4, 5, 4):
+                            for dy in range(-4, 5, 4):
+                                if dx != 0 or dy != 0:
+                                    draw.text((tx+dx, hook_y+dy), line, font=FONT_HOOK, fill=(0,0,0))
+                        draw.text((tx, hook_y), line, font=FONT_HOOK, fill=(255, 255, 255))
+                        hook_y += hook_line_h
 
-                # Z1: caption at y = 0.75*H
-                wi = int(f * words_per_frame)
-                caption = " ".join(scene_words[wi:wi + 8])
-                if caption:
-                    cap_lines = wrap_text_pixel(draw, caption, font_caption, int(W * 0.85))
-                    cy_pos = int(H * 0.75)
-                    for line in cap_lines:
-                        bb = draw.textbbox((0, 0), line, font=font_caption)
-                        lw = bb[2] - bb[0]
-                        lx = (W - lw) // 2
-                        draw.text((lx, cy_pos), line, font=font_caption, fill="yellow",
-                                  stroke_width=8, stroke_fill="black")
-                        cy_pos += bb[3] - bb[1] + 4
-
-                out_bgr = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
-                pipe.stdin.write(out_bgr.tobytes())
+                frame_out = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
+                proc.stdin.write(frame_out.tobytes())
                 global_frame += 1
 
-        pipe.stdin.close()
-        pipe.wait()
+        proc.stdin.close()
+        proc.wait()
+        if proc.returncode != 0:
+            raise RuntimeError(f"FFmpeg pipe error: {proc.stderr.read().decode()[-300:]}")
 
-        # Mux silent video + audio
-        subprocess.run([
+        # Mux with audio
+        mux_cmd = [
             "ffmpeg", "-y",
-            "-i", str(silent_path),
-            "-i", audio_path,
+            "-i", silent_path, "-i", audio_path,
             "-c:v", "copy", "-c:a", "aac",
             "-shortest", "-movflags", "+faststart",
-            str(output_path),
-        ], check=True, capture_output=True)
+            out_path
+        ]
+        subprocess.run(mux_cmd, check=True, capture_output=True, timeout=120)
+        job_set(job_id, "done", {"output": f"{job_id}.mp4", "type": "synthetic"})
 
-        silent_path.unlink(missing_ok=True)
-        for ip in image_paths:
-            Path(ip).unlink(missing_ok=True)
-        Path(audio_path).unlink(missing_ok=True)
-
-        job_done(job_id, {"output_file": output_path.name, "type": "synthetic"})
-    except Exception as e:
-        job_error(job_id, str(e))
-
+    except Exception as ex:
+        job_set(job_id, "error", error=str(ex))
+    finally:
+        if os.path.exists(silent_path):
+            os.remove(silent_path)
+        for p in image_paths:
+            if os.path.exists(p):
+                os.remove(p)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
 
 # ---------------------------------------------------------------------------
-# API ROUTES
+# ROUTES
 # ---------------------------------------------------------------------------
 class ExtractRequest(BaseModel):
     url: str
 
-
-class RenderSlicedRequest(BaseModel):
+class SlicedRenderRequest(BaseModel):
     url: str
     blueprint: dict
 
-
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-
 @app.post("/api/extract")
-async def extract(req: ExtractRequest):
-    job_id = new_job()
+async def api_extract(req: ExtractRequest):
+    job_id = str(uuid.uuid4())
+    job_set(job_id, "running")
     threading.Thread(target=extract_worker, args=(job_id, req.url), daemon=True).start()
     return {"job_id": job_id}
 
-
 @app.post("/api/render/sliced")
-async def render_sliced(req: RenderSlicedRequest):
-    job_id = new_job()
-    threading.Thread(target=render_sliced_worker, args=(job_id, req.url, req.blueprint), daemon=True).start()
-    return {"job_id": job_id}
-
-
-@app.post("/api/render/synthetic")
-async def render_synthetic(
-    blueprint: str = Form(...),
-    audio: UploadFile = File(...),
-    images: list[UploadFile] = File(...),
-):
-    job_id = new_job()
-    bp = json.loads(blueprint)
-
-    audio_path = f"temp/audio_{job_id}{Path(audio.filename).suffix}"
-    with open(audio_path, "wb") as f:
-        f.write(await audio.read())
-
-    image_paths = []
-    for i, img_file in enumerate(images):
-        ext = Path(img_file.filename).suffix or ".jpg"
-        img_path = f"temp/img_{job_id}_{i:03d}{ext}"
-        with open(img_path, "wb") as f:
-            f.write(await img_file.read())
-        image_paths.append(img_path)
-    image_paths.sort()
-
+async def api_render_sliced(req: SlicedRenderRequest):
+    job_id = str(uuid.uuid4())
+    job_set(job_id, "running")
     threading.Thread(
-        target=render_synthetic_worker,
-        args=(job_id, image_paths, audio_path, bp),
-        daemon=True,
+        target=render_sliced_worker,
+        args=(job_id, req.url, req.blueprint), daemon=True
     ).start()
     return {"job_id": job_id}
 
+@app.post("/api/render/synthetic")
+async def api_render_synthetic(
+    blueprint: str = Form(...),
+    images: list[UploadFile] = File(...),
+    audio: UploadFile = File(...),
+):
+    job_id = str(uuid.uuid4())
+    job_set(job_id, "running")
+
+    image_paths = []
+    for i, img in enumerate(images):
+        ext  = Path(img.filename).suffix or ".jpg"
+        path = str(BASE_DIR / "temp" / f"{job_id}_img{i}{ext}")
+        with open(path, "wb") as f:
+            f.write(await img.read())
+        image_paths.append(path)
+
+    audio_ext  = Path(audio.filename).suffix or ".mp3"
+    audio_path = str(BASE_DIR / "temp" / f"{job_id}_audio{audio_ext}")
+    with open(audio_path, "wb") as f:
+        f.write(await audio.read())
+
+    bp = json.loads(blueprint)
+    threading.Thread(
+        target=render_synthetic_worker,
+        args=(job_id, image_paths, audio_path, bp), daemon=True
+    ).start()
+    return {"job_id": job_id}
 
 @app.get("/api/job/{job_id}")
-async def get_job(job_id: str):
-    if job_id not in JOBS:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return JOBS[job_id]
-
+async def api_job_status(job_id: str):
+    return JOBS.get(job_id, {"state": "not_found"})
 
 @app.get("/api/clips")
-async def list_clips():
+async def api_list_clips():
     clips = []
-    for f in sorted(Path("outputs").iterdir()):
-        if f.suffix == ".mp4":
-            clips.append({"name": f.name, "size_mb": round(f.stat().st_size / 1e6, 2)})
+    for f in sorted((BASE_DIR / "outputs").glob("*.mp4")):
+        clips.append({"filename": f.name, "size_mb": round(f.stat().st_size / 1e6, 2)})
     return clips
 
-
-@app.get("/api/clips/{filename}")
-async def download_clip(filename: str):
-    path = Path("outputs") / filename
+@app.get("/api/download/{filename}")
+async def api_download(filename: str):
+    path = BASE_DIR / "outputs" / filename
     if not path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(404, "File not found")
     return FileResponse(str(path), media_type="video/mp4", filename=filename)
-
-
-@app.get("/health")
-async def health_check():
-    """Lightweight endpoint for Render zero-downtime deployment checks"""
-   # return {"status": "healthy", "service": "ClipForge"}
-    return HTMLResponse(200)
-
-
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False, workers=1)
