@@ -172,10 +172,22 @@ HTML = """<!DOCTYPE html>
     <div id="m-synth" class="col" style="display:none">
       <div><label class="lbl">Blueprint JSON</label>
         <textarea id="sb" rows="5" placeholder='{"hook_text_overlay":"...","asset_assembly_instructions":{"text_to_speech_script":"..."}}'></textarea></div>
-      <div><label class="lbl">Scene Images (ordered)</label>
-        <label class="fb"><input type="file" id="si" accept="image/*" multiple onchange="fl(this,'il')"/><span id="il">Click to upload scene images</span></label></div>
+      <div>
+      <label class="lbl">Scene Images (ordered)</label>
+
+      <div class="dropzone" id="img-dropzone" style="border:2px dashed var(--border); border-radius:6px; padding:20px; text-align:center; cursor:pointer;">
+  <input type="file" id="si" accept="image/*" multiple style="display:none;" onchange="handleImageSelect(event)"/>
+  <div id="il">Drag & drop images here or click to select</div>
+  <div id="img-count" style="margin-top:8px; font-size:11px; color:var(--accent);"></div>
+</div>
+        </div>
       <div><label class="lbl">Audio File (pre-generated TTS)</label>
-        <label class="fb"><input type="file" id="sa" accept="audio/*" onchange="fl(this,'al')"/><span id="al">Click to upload audio</span></label></div>
+        <div class="dropzone" id="audio-dropzone" style="border:2px dashed var(--border); border-radius:6px; padding:20px; text-align:center; cursor:pointer;">
+  <input type="file" id="sa" accept="audio/*" style="display:none;" onchange="handleAudioSelect(event)"/>
+  <div id="al">Drag & drop audio file here or click to select</div>
+  <div id="audio-name" style="margin-top:8px; font-size:11px; color:var(--accent);"></div>
+</div>
+        </div>
       <button onclick="doSynth()">&#11041; Render Synthetic</button>
     </div>
     <div class="sep"></div>
@@ -210,6 +222,63 @@ function cp(id,btn){
     const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1400);
   });
 }
+
+
+const imgDrop = document.getElementById('img-dropzone');
+imgDrop.addEventListener('click', () => document.getElementById('si').click());
+imgDrop.addEventListener('dragover', (e) => { e.preventDefault(); imgDrop.style.borderColor = 'var(--accent)'; });
+imgDrop.addEventListener('dragleave', () => { imgDrop.style.borderColor = 'var(--border)'; });
+imgDrop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  imgDrop.style.borderColor = 'var(--border)';
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if (files.length) {
+    const dt = new DataTransfer();
+    files.forEach(f => dt.items.add(f));
+    document.getElementById('si').files = dt.files;
+    handleImageSelect({ target: { files: dt.files } });
+  }
+});
+
+function handleImageSelect(event) {
+  const files = Array.from(event.target.files);
+  if (files.length) {
+    document.getElementById('il').innerHTML = `${files.length} image(s) selected. Drag more to replace.`;
+    document.getElementById('img-count').innerHTML = files.map(f => f.name).join(', ');
+  } else {
+    document.getElementById('il').innerHTML = 'Drag & drop images here or click to select';
+    document.getElementById('img-count').innerHTML = '';
+  }
+}
+
+
+const audioDrop = document.getElementById('audio-dropzone');
+audioDrop.addEventListener('click', () => document.getElementById('sa').click());
+audioDrop.addEventListener('dragover', (e) => { e.preventDefault(); audioDrop.style.borderColor = 'var(--accent)'; });
+audioDrop.addEventListener('dragleave', () => { audioDrop.style.borderColor = 'var(--border)'; });
+audioDrop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  audioDrop.style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('audio/')) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('sa').files = dt.files;
+    handleAudioSelect({ target: { files: dt.files } });
+  }
+});
+
+function handleAudioSelect(event) {
+  const file = event.target.files[0];
+  if (file) {
+    document.getElementById('al').innerHTML = `Selected: ${file.name}`;
+    document.getElementById('audio-name').innerHTML = file.name;
+  } else {
+    document.getElementById('al').innerHTML = 'Drag & drop audio file here or click to select';
+    document.getElementById('audio-name').innerHTML = '';
+  }
+}
+
 function fl(inp,lid){
   const l=document.getElementById(lid);
   l.textContent=inp.files.length===1?inp.files[0].name:inp.files.length>1?inp.files.length+' files selected':'Click to upload';
