@@ -96,13 +96,15 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         clip_name = f"clip_{uuid.uuid4().hex[:8]}_{ts_from.replace(':','-')}_{ts_to.replace(':','-')}.mp4"
         out_file  = CLIPS / clip_name
 
+        # Pre-seek before -i = fast keyframe jump, no full decode.
+        # -c copy = stream copy, no re-encode. Near-instant for any clip length.
+        # The double -ss trick: outer seeks to keyframe, inner trims precisely.
         cmd = [
             "ffmpeg", "-y",
-            "-i", str(source),
             "-ss", ts_from,
+            "-i", str(source),
             "-to", ts_to,
-            "-c:v", "libx264", "-profile:v", "main", "-level:v", "4.0",
-            "-c:a", "aac", "-b:a", "192k",
+            "-c", "copy",
             "-avoid_negative_ts", "make_zero",
             "-movflags", "+faststart",
             str(out_file)
