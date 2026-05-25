@@ -46,33 +46,20 @@ def seconds_to_ts(s: float) -> str:
     return f"{h:02d}:{m:02d}:{sec:06.3f}"
 
 def _timestamp_to_seconds(ts: str) -> float:
-
     parts = ts.split(":")
-
     if len(parts) != 3:
-
         raise ValueError("Timestamp must be in HH:MM:SS format")
-
     hours = int(parts[0])
-
     minutes = int(parts[1])
-
     seconds = float(parts[2])
-
     return hours * 3600 + minutes * 60 + seconds
 
 def _calculate_duration(ts_from: str, ts_to: str) -> str:
-
     start_seconds = _timestamp_to_seconds(ts_from)
-
     end_seconds = _timestamp_to_seconds(ts_to)
-
     if end_seconds <= start_seconds:
-
         raise ValueError("'to' timestamp must be greater than 'from' timestamp")
-
     duration = end_seconds - start_seconds
-
     return str(duration)
 
 def ts_to_seconds(ts: str) -> float:
@@ -288,7 +275,6 @@ def subtitle_segments_worker(job_id: str, url: str):
     except Exception as ex:
         job_set(job_id, "error", error=str(ex))
 
-
 def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode: str = "normal"):
     try:
         if not validate_timestamp(ts_from):
@@ -319,11 +305,10 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
         safe_from = ts_from.replace(":", "-").replace(".", "_")
         safe_to = ts_to.replace(":", "-").replace(".", "_")
 
-        clip_name = (
-            f"clip_{uuid.uuid4().hex[:8]}_{safe_from}_{safe_to}.mp4"
-        )
+        clip_name = f"clip_{uuid.uuid4().hex[:8]}_{safe_from}_{safe_to}.mp4"
         out_file = CLIPS / clip_name
-      if mode == "9:16":
+
+        if mode == "9:16":
             cmd = [
                 "ffmpeg", "-y",
                 "-ss", ts_from,
@@ -347,7 +332,6 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
                 "-movflags", "+faststart",
                 str(out_file)
             ]
-
 
         result = subprocess.run(
             cmd,
@@ -722,10 +706,10 @@ async function startCut() {
   setMsg('cut-msg', '', 'Cutting clip...');
 
   try {
+    const cutMode = document.querySelector('input[name="cut-mode"]:checked')?.value || 'normal';
     const res = await fetch('/api/cut', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-     const cutMode = document.querySelector('input[name="cut-mode"]:checked')?.value || 'normal';
       body: JSON.stringify({ source_filename: currentFilename, ts_from: from, ts_to: to, mode: cutMode })
     });
     const data = await res.json();
@@ -889,12 +873,12 @@ async def api_subtitles_segments(req: SubtitleOnlyRequest):
 async def api_cut(req: CutRequest):
     job_id = str(uuid.uuid4())
     job_set(job_id, "running")
-        threading.Thread(
+    threading.Thread(
         target=cut_worker,
         args=(job_id, req.source_filename, req.ts_from, req.ts_to, req.mode),
         daemon=True
     ).start()
-   return {"job_id": job_id}
+    return {"job_id": job_id}
 
 @app.get("/api/job/{job_id}")
 async def api_job(job_id: str):
