@@ -334,12 +334,17 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
                 str(out_file)
             ]
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
+            result = subprocess.run(
+               cmd,
+               capture_output=True,
+               text=True,
+               timeout=300
+             )
+
+        # DEBUG - remove after confirming
+        print(f"[CUT DEBUG] returncode={result.returncode} | file_exists={out_file.exists()} | size={out_file.stat().st_size if out_file.exists() else 0}")
+        print(f"[CUT DEBUG] stderr tail: {result.stderr.strip()[-200:]}")
+
 
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-600:])
