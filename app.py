@@ -45,6 +45,36 @@ def seconds_to_ts(s: float) -> str:
     sec = s % 60
     return f"{h:02d}:{m:02d}:{sec:06.3f}"
 
+def _timestamp_to_seconds(ts: str) -> float:
+
+    parts = ts.split(":")
+
+    if len(parts) != 3:
+
+        raise ValueError("Timestamp must be in HH:MM:SS format")
+
+    hours = int(parts[0])
+
+    minutes = int(parts[1])
+
+    seconds = float(parts[2])
+
+    return hours * 3600 + minutes * 60 + seconds
+
+def _calculate_duration(ts_from: str, ts_to: str) -> str:
+
+    start_seconds = _timestamp_to_seconds(ts_from)
+
+    end_seconds = _timestamp_to_seconds(ts_to)
+
+    if end_seconds <= start_seconds:
+
+        raise ValueError("'to' timestamp must be greater than 'from' timestamp")
+
+    duration = end_seconds - start_seconds
+
+    return str(duration)
+
 def ts_to_seconds(ts: str) -> float:
     """Convert HH:MM:SS[.mmm] to seconds."""
     parts = ts.split(':')
@@ -272,8 +302,9 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
             raise RuntimeError(f"Source file not found: {source_filename}")
 
         # Strip milliseconds for ffmpeg compatibility
-        from_clean = strip_milliseconds(ts_from)
-        to_clean   = strip_milliseconds(ts_to)
+        from_clean = _timestamp_to_seconds(ts_from)
+        to_clean   = _timestamp_to_seconds(ts_to)
+        duration = _calculate_duration(ts_from, ts_to
 
         clip_name = f"clip_{uuid.uuid4().hex[:8]}_{from_clean.replace(':','-')}_{to_clean.replace(':','-')}.mp4"
         out_file = CLIPS / clip_name
@@ -282,7 +313,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
             "ffmpeg", "-y",
             "-ss", from_clean,
             "-i", str(source),
-            "-to", to_clean,
+            "-t", duration,
             "-c", "copy",
             "-avoid_negative_ts", "make_zero",
             "-movflags", "+faststart",
