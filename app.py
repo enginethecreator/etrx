@@ -5,6 +5,7 @@ import uuid
 import subprocess
 import threading
 from pathlib import Path
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -64,6 +65,10 @@ def extract_plain_text_from_vtt(vtt_path: Path) -> str:
                     lines.append(clean)
     return ' '.join(lines)
 
+def get_file_size_mb(path: Path) -> float:
+    """Return file size in MB rounded to 2 decimals."""
+    return round(path.stat().st_size / (1024 * 1024), 2) if path.exists() else 0.0
+
 # ---------------------------------------------------------------------------
 # WORKERS
 # ---------------------------------------------------------------------------
@@ -88,12 +93,14 @@ def download_worker(job_id: str, url: str):
             # Already have video, try to get subtitles if missing
             vtt_path = out_file.with_suffix('.en.vtt')
             sub_text = extract_plain_text_from_vtt(vtt_path) if vtt_path.exists() else ""
+            file_size_mb = get_file_size_mb(out_file)
             job_set(job_id, "done", {
                 "video_id": video_id,
                 "title": title,
                 "duration": duration,
                 "filename": out_file.name,
                 "subtitle_text": sub_text,
+                "size_mb": file_size_mb,
             })
             return
 
@@ -124,12 +131,15 @@ def download_worker(job_id: str, url: str):
         sub_text = extract_plain_text_from_vtt(vtt_path)
         vtt_path.unlink(missing_ok=True)
 
+        file_size_mb = get_file_size_mb(out_file)
+
         job_set(job_id, "done", {
             "video_id": video_id,
             "title": title,
             "duration": duration,
             "filename": out_file.name,
             "subtitle_text": sub_text,
+            "size_mb": file_size_mb,
         })
     except Exception as ex:
         job_set(job_id, "error", error=str(ex))
@@ -169,10 +179,7 @@ def subtitle_only_worker(job_id: str, url: str):
         job_set(job_id, "error", error=str(ex))
 
 def subtitle_segments_worker(job_id: str, url: str):
-    """
-    Extract structured subtitle segments with start/end timestamps
-    using yt-dlp's JSON3 format (tStartMs + dDurationMs).
-    """
+    """Extract structured subtitle segments with start/end timestamps using yt-dlp's JSON3."""
     try:
         # Get video ID and title for display
         meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
@@ -180,10 +187,9 @@ def subtitle_segments_worker(job_id: str, url: str):
         if meta_res.returncode != 0:
             raise RuntimeError(meta_res.stderr.strip()[:400])
         meta = json.loads(meta_res.stdout.strip().splitlines()[-1])
-        video_id = meta.get("id", "unknown")
         title = meta.get("title", "untitled")
 
-        # Download JSON3 subtitles (auto + manual fallback)
+        # Download JSON3 subtitles
         tmp_base = TEMP / f"segments_{job_id}"
         sub_cmd = ytdlp_base() + [
             "--skip-download",
@@ -196,23 +202,17 @@ def subtitle_segments_worker(job_id: str, url: str):
         ]
         subprocess.run(sub_cmd, capture_output=True, timeout=60)
 
-        # Look for JSON3 file
         json3_path = Path(str(tmp_base) + ".en.json3")
         if not json3_path.exists():
-            # Try manual subs (sometimes named differently)
-            json3_path = Path(str(tmp_base) + ".en.json3")
-            if not json3_path.exists():
-                raise RuntimeError("No JSON3 subtitles found (English).")
+            raise RuntimeError("No JSON3 subtitles found (English).")
 
         with open(json3_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # Parse events into desired segment array
         segments = []
         for event in data.get("events", []):
             start_ms = event.get("tStartMs", 0)
             duration_ms = event.get("dDurationMs", 0)
-            # Combine text fragments
             text_parts = [seg.get("utf8", "") for seg in event.get("segs", [])]
             text = "".join(text_parts).strip()
             if not text or text == "\n":
@@ -226,7 +226,6 @@ def subtitle_segments_worker(job_id: str, url: str):
                 "text": text
             })
 
-        # Cleanup
         json3_path.unlink(missing_ok=True)
 
         job_set(job_id, "done", {
@@ -245,7 +244,6 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         clip_name = f"clip_{uuid.uuid4().hex[:8]}_{ts_from.replace(':','-')}_{ts_to.replace(':','-')}.mp4"
         out_file = CLIPS / clip_name
 
-        # Fast copy cut
         cmd = [
             "ffmpeg", "-y",
             "-ss", ts_from,
@@ -269,7 +267,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         job_set(job_id, "error", error=str(ex))
 
 # ---------------------------------------------------------------------------
-# INLINE HTML (with "Copy Segments (JSON)" button)
+# INLINE HTML (with Downloads Library and file size)
 # ---------------------------------------------------------------------------
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -285,10 +283,10 @@ HTML = r"""<!DOCTYPE html>
   --text:#e8e8f0;--muted:#6b6b80;--ok:#4caf88;--err:#fc5c5c;
 }
 body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:13px;min-height:100vh}
-header{padding:16px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px}
+header{padding:16px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header h1{font-size:17px;font-weight:700;letter-spacing:.06em;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .badge{font-size:10px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:4px}
-.main{max-width:860px;margin:40px auto;padding:0 24px;display:flex;flex-direction:column;gap:28px}
+.main{max-width:1200px;margin:40px auto;padding:0 24px;display:flex;flex-direction:column;gap:28px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .card-header .num{width:24px;height:24px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
@@ -320,6 +318,12 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .subtitle-box textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:6px;font-family:inherit;font-size:12px;resize:vertical}
 .copy-btn{background:var(--surface2);border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer}
 .copy-btn:hover{background:var(--accent);color:#000}
+.file-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
+.file-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+.file-info{flex:1;min-width:0}
+.file-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-meta{font-size:10px;color:var(--muted);margin-top:3px}
+.refresh-btn{background:var(--surface2);border:1px solid var(--border);padding:6px 12px;font-size:11px}
 </style>
 </head>
 <body>
@@ -398,12 +402,27 @@ button:disabled{opacity:.35;cursor:not-allowed}
     </div>
   </div>
 
+  <!-- STEP 3: DOWNLOADS LIBRARY -->
+  <div class="card">
+    <div class="card-header">
+      <div class="num">3</div>
+      <div class="title">Downloads Library</div>
+      <button class="refresh-btn" onclick="loadDownloadsList()">↻ Refresh</button>
+    </div>
+    <div class="card-body">
+      <div id="downloads-list" class="file-list">
+        <div class="msg">Loading...</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 let currentFilename = null;
 let currentClipFilename = null;
 let currentSubtitle = '';
+let currentFileSize = null;
 
 function setMsg(id, cls, txt) {
   const el = document.getElementById(id);
@@ -422,6 +441,10 @@ function fmtDuration(s) {
   const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
   return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
                : `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function formatBytes(mb) {
+  return mb.toFixed(2) + ' MB';
 }
 
 function poll(jobId, pbId, msgId, onDone, onFail) {
@@ -457,6 +480,7 @@ async function startDownload() {
   currentFilename = null;
   currentClipFilename = null;
   currentSubtitle = '';
+  currentFileSize = null;
 
   document.getElementById('dl-btn').disabled = true;
   document.getElementById('cut-btn').disabled = true;
@@ -477,9 +501,10 @@ async function startDownload() {
     poll(data.job_id, 'dl-pb', 'dl-msg', (d) => {
       currentFilename = d.filename;
       currentSubtitle = d.subtitle_text || '';
-      setMsg('dl-msg', 'ok', '✓ Ready — ' + d.filename);
+      currentFileSize = d.size_mb || 0;
+      setMsg('dl-msg', 'ok', `✓ Ready — ${d.filename} (${formatBytes(currentFileSize)})`);
       document.getElementById('dl-title').textContent = d.title;
-      document.getElementById('dl-meta').textContent = 'Duration: ' + fmtDuration(d.duration) + '  ·  ' + d.filename;
+      document.getElementById('dl-meta').textContent = 'Duration: ' + fmtDuration(d.duration) + '  ·  Size: ' + formatBytes(currentFileSize);
       document.getElementById('dl-info').style.display = '';
       document.getElementById('dl-full-btn').disabled = false;
       document.getElementById('cut-btn').disabled = false;
@@ -489,6 +514,7 @@ async function startDownload() {
         document.getElementById('subtitle-area').style.display = '';
         document.getElementById('subtitle-text').value = currentSubtitle;
       }
+      loadDownloadsList(); // refresh library
     }, () => {
       document.getElementById('dl-btn').disabled = false;
     });
@@ -561,7 +587,6 @@ async function fetchAndCopySegments() {
       const segmentsJson = JSON.stringify(d.segments, null, 2);
       navigator.clipboard.writeText(segmentsJson);
       setMsg('dl-msg', 'ok', `✓ Segments copied to clipboard! (${d.segments.length} segments)`);
-      // Optional: display preview in the textarea
       document.getElementById('subtitle-text').value = segmentsJson;
     }, () => {
       setMsg('dl-msg', 'err', '✗ Failed to fetch segments');
@@ -631,9 +656,45 @@ function copySubtitle() {
   setTimeout(() => { btn.textContent = orig; }, 1500);
 }
 
+async function loadDownloadsList() {
+  const container = document.getElementById('downloads-list');
+  container.innerHTML = '<div class="msg">Loading...</div>';
+  try {
+    const res = await fetch('/api/downloads/list');
+    const files = await res.json();
+    if (!files.length) {
+      container.innerHTML = '<div class="msg">No downloaded videos yet.</div>';
+      return;
+    }
+    container.innerHTML = files.map(f => `
+      <div class="file-item">
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(f.filename)}</div>
+          <div class="file-meta">${f.size_mb} MB · ${f.modified}</div>
+        </div>
+        <a href="/api/download-file/video/${encodeURIComponent(f.filename)}" class="sec" style="padding:5px 12px;border-radius:6px;text-decoration:none;color:var(--text);border:1px solid var(--border);">⬇ Download</a>
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = '<div class="msg err">Failed to load downloads list.</div>';
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
 document.getElementById('url-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') startDownload();
 });
+
+// Initial load
+loadDownloadsList();
 </script>
 </body>
 </html>"""
@@ -694,6 +755,19 @@ async def api_cut(req: CutRequest):
 @app.get("/api/job/{job_id}")
 async def api_job(job_id: str):
     return JOBS.get(job_id, {"state": "not_found"})
+
+@app.get("/api/downloads/list")
+async def list_downloads():
+    """Return list of MP4 files in DOWNLOADS folder with size and modification date."""
+    files = []
+    for f in sorted(DOWNLOADS.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+        stat = f.stat()
+        files.append({
+            "filename": f.name,
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        })
+    return files
 
 @app.get("/api/download-file/video/{filename}")
 async def download_video(filename: str):
