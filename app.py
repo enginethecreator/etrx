@@ -311,7 +311,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
 
         cmd = [
             "ffmpeg", "-y",
-            "-ss", from_clean,
+            "-ss", ts_from,
             "-i", str(source),
             "-t", duration,
             "-c", "copy",
