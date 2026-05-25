@@ -6,9 +6,10 @@ import subprocess
 import threading
 from pathlib import Path
 from datetime import datetime
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 # ---------------------------------------------------------------------------
 # STARTUP
@@ -34,24 +35,44 @@ def job_set(job_id: str, state: str, data: dict = None, error: str = None):
     JOBS[job_id] = {"state": state, "data": data or {}, "error": error}
 
 # ---------------------------------------------------------------------------
-# COMMON UTILS
+# UTILITIES
 # ---------------------------------------------------------------------------
+def seconds_to_ts(s: float) -> str:
+    """Convert seconds to HH:MM:SS.mmm (same as original Python helper)."""
+    s = round(s, 3)
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s % 60
+    return f"{h:02d}:{m:02d}:{sec:06.3f}"
+
+def ts_to_seconds(ts: str) -> float:
+    """Convert HH:MM:SS.mmm to seconds (for validation)."""
+    parts = ts.split(':')
+    if len(parts) != 3:
+        raise ValueError("Timestamp must be HH:MM:SS.mmm")
+    h = int(parts[0])
+    m = int(parts[1])
+    s = float(parts[2])
+    return h * 3600 + m * 60 + s
+
+def validate_timestamp(ts: str) -> bool:
+    """Check if timestamp matches HH:MM:SS.mmm (leading zeros optional but recommended)."""
+    pattern = r'^\d{1,2}:\d{1,2}:\d{2}(?:\.\d{1,3})?$'
+    if not re.match(pattern, ts):
+        return False
+    try:
+        ts_to_seconds(ts)
+        return True
+    except:
+        return False
+
 def ytdlp_base() -> list:
-    """Base yt-dlp command with cookies if available."""
     cmd = ["yt-dlp"]
     if COOKIES.exists():
         cmd += ["--cookies", str(COOKIES)]
     return cmd
 
-def format_time(seconds: float) -> str:
-    """Convert seconds to HH:MM:SS.mmm format."""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = seconds % 60
-    return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
-
 def extract_plain_text_from_vtt(vtt_path: Path) -> str:
-    """Extract plain text from a WebVTT subtitle file."""
     if not vtt_path.exists():
         return ""
     lines = []
@@ -65,16 +86,13 @@ def extract_plain_text_from_vtt(vtt_path: Path) -> str:
     return ' '.join(lines)
 
 def get_file_size_mb(path: Path) -> float:
-    """Return file size in MB rounded to 2 decimals."""
     return round(path.stat().st_size / (1024 * 1024), 2) if path.exists() else 0.0
 
 # ---------------------------------------------------------------------------
 # WORKERS
 # ---------------------------------------------------------------------------
 def download_worker(job_id: str, url: str):
-    """Download video + plain text subtitles (VTT -> text)."""
     try:
-        # Metadata
         meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
         meta_res = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
         if meta_res.returncode != 0:
@@ -84,11 +102,11 @@ def download_worker(job_id: str, url: str):
         video_id = meta.get("id", "unknown")
         title = meta.get("title", "untitled")
         duration_raw = meta.get("duration", 0)
-        # Ensure duration is in seconds (yt-dlp returns seconds, but if somehow string, parse)
         try:
-            duration = float(duration_raw)
+            duration_sec = float(duration_raw)
         except (TypeError, ValueError):
-            duration = 0
+            duration_sec = 0
+        duration_str = seconds_to_ts(duration_sec) if duration_sec > 0 else "00:00:00.000"
 
         safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:60]
         out_file = DOWNLOADS / f"{video_id}_{safe_title}.mp4"
@@ -96,18 +114,17 @@ def download_worker(job_id: str, url: str):
         if out_file.exists():
             vtt_path = out_file.with_suffix('.en.vtt')
             sub_text = extract_plain_text_from_vtt(vtt_path) if vtt_path.exists() else ""
-            file_size_mb = get_file_size_mb(out_file)
             job_set(job_id, "done", {
                 "video_id": video_id,
                 "title": title,
-                "duration": duration,
+                "duration_sec": duration_sec,
+                "duration_str": duration_str,
                 "filename": out_file.name,
                 "subtitle_text": sub_text,
-                "size_mb": file_size_mb,
+                "size_mb": get_file_size_mb(out_file),
             })
             return
 
-        # Download video with H.264/AAC
         dl_cmd = ytdlp_base() + [
             "-S", "vcodec:h264,res,acodec:aac",
             "--merge-output-format", "mp4",
@@ -119,7 +136,6 @@ def download_worker(job_id: str, url: str):
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-400:])
 
-        # Download subtitles as VTT (for plain text)
         vtt_path = out_file.with_suffix('.en.vtt')
         sub_cmd = ytdlp_base() + [
             "--skip-download",
@@ -134,21 +150,19 @@ def download_worker(job_id: str, url: str):
         sub_text = extract_plain_text_from_vtt(vtt_path)
         vtt_path.unlink(missing_ok=True)
 
-        file_size_mb = get_file_size_mb(out_file)
-
         job_set(job_id, "done", {
             "video_id": video_id,
             "title": title,
-            "duration": duration,
+            "duration_sec": duration_sec,
+            "duration_str": duration_str,
             "filename": out_file.name,
             "subtitle_text": sub_text,
-            "size_mb": file_size_mb,
+            "size_mb": get_file_size_mb(out_file),
         })
     except Exception as ex:
         job_set(job_id, "error", error=str(ex))
 
 def subtitle_only_worker(job_id: str, url: str):
-    """Download only plain text subtitles (no video)."""
     try:
         meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
         meta_res = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
@@ -180,7 +194,6 @@ def subtitle_only_worker(job_id: str, url: str):
         job_set(job_id, "error", error=str(ex))
 
 def subtitle_segments_worker(job_id: str, url: str):
-    """Extract structured subtitle segments with start/end timestamps using yt-dlp's JSON3."""
     try:
         meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
         meta_res = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
@@ -220,8 +233,8 @@ def subtitle_segments_worker(job_id: str, url: str):
             start_sec = start_ms / 1000.0
             end_sec = (start_ms + duration_ms) / 1000.0
             segments.append({
-                "start": format_time(start_sec),
-                "end": format_time(end_sec),
+                "start": seconds_to_ts(start_sec),
+                "end": seconds_to_ts(end_sec),
                 "text": text
             })
 
@@ -236,6 +249,12 @@ def subtitle_segments_worker(job_id: str, url: str):
 
 def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
     try:
+        # Validate timestamps before running ffmpeg
+        if not validate_timestamp(ts_from):
+            raise ValueError(f"Invalid start timestamp: {ts_from}. Use HH:MM:SS.mmm")
+        if not validate_timestamp(ts_to):
+            raise ValueError(f"Invalid end timestamp: {ts_to}. Use HH:MM:SS.mmm")
+
         source = DOWNLOADS / source_filename
         if not source.exists():
             raise RuntimeError(f"Source file not found: {source_filename}")
@@ -266,7 +285,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         job_set(job_id, "error", error=str(ex))
 
 # ---------------------------------------------------------------------------
-# INLINE HTML (with delete button and fixed duration formatting)
+# INLINE HTML (duration uses backend formatted string)
 # ---------------------------------------------------------------------------
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -379,7 +398,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
       <div class="title">Cut Clip</div>
     </div>
     <div class="card-body">
-      <div class="hint">After downloading a video, set timestamps and cut a clip.</div>
+      <div class="hint">After downloading a video, set timestamps and cut a clip. Use format HH:MM:SS.mmm (e.g., 01:34:33.000).</div>
       <div class="ts-row">
         <div>
           <label class="lbl">From (HH:MM:SS.mmm)</label>
@@ -436,19 +455,6 @@ function setPb(id, running) {
   const pb = document.getElementById(id);
   if (running) { pb.classList.add('spin'); pb.style.width = '35%'; }
   else          { pb.classList.remove('spin'); }
-}
-
-function fmtDuration(seconds) {
-  // Ensure seconds is a number and positive
-  let s = parseFloat(seconds);
-  if (isNaN(s) || s <= 0) return '0:00';
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-  }
-  return `${m}:${String(sec).padStart(2,'0')}`;
 }
 
 function formatBytes(mb) {
@@ -512,7 +518,7 @@ async function startDownload() {
       currentFileSize = d.size_mb || 0;
       setMsg('dl-msg', 'ok', `✓ Ready — ${d.filename} (${formatBytes(currentFileSize)})`);
       document.getElementById('dl-title').textContent = d.title;
-      document.getElementById('dl-meta').textContent = 'Duration: ' + fmtDuration(d.duration) + '  ·  Size: ' + formatBytes(currentFileSize);
+      document.getElementById('dl-meta').textContent = 'Duration: ' + d.duration_str + '  ·  Size: ' + formatBytes(currentFileSize);
       document.getElementById('dl-info').style.display = '';
       document.getElementById('dl-full-btn').disabled = false;
       document.getElementById('cut-btn').disabled = false;
@@ -522,7 +528,7 @@ async function startDownload() {
         document.getElementById('subtitle-area').style.display = '';
         document.getElementById('subtitle-text').value = currentSubtitle;
       }
-      loadDownloadsList(); // refresh library
+      loadDownloadsList();
     }, () => {
       document.getElementById('dl-btn').disabled = false;
     });
@@ -611,6 +617,11 @@ async function startCut() {
   const to   = document.getElementById('ts-to').value.trim();
   if (!from || !to) { setMsg('cut-msg', 'err', '✗ Both timestamps required'); return; }
 
+  // Validate format (simple regex)
+  const tsPattern = /^\d{1,2}:\d{1,2}:\d{2}(?:\.\d{1,3})?$/;
+  if (!tsPattern.test(from)) { setMsg('cut-msg', 'err', '✗ Invalid start timestamp (use HH:MM:SS.mmm)'); return; }
+  if (!tsPattern.test(to))   { setMsg('cut-msg', 'err', '✗ Invalid end timestamp (use HH:MM:SS.mmm)'); return; }
+
   currentClipFilename = null;
   document.getElementById('cut-btn').disabled = true;
   document.getElementById('cut-info').style.display = 'none';
@@ -670,7 +681,6 @@ async function deleteFile(filename) {
     const res = await fetch('/api/downloads/' + encodeURIComponent(filename), { method: 'DELETE' });
     if (res.ok) {
       loadDownloadsList();
-      // If the deleted file was the currently selected video, clear it
       if (currentFilename === filename) {
         currentFilename = null;
         currentClipFilename = null;
@@ -743,6 +753,12 @@ class CutRequest(BaseModel):
     ts_from: str
     ts_to: str
 
+    @validator('ts_from', 'ts_to')
+    def validate_timestamp(cls, v):
+        if not validate_timestamp(v):
+            raise ValueError(f"Invalid timestamp format: {v}. Use HH:MM:SS.mmm (e.g., 01:34:33.000)")
+        return v
+
 class SubtitleOnlyRequest(BaseModel):
     url: str
 
@@ -791,7 +807,6 @@ async def api_job(job_id: str):
 
 @app.get("/api/downloads/list")
 async def list_downloads():
-    """Return list of MP4 files in DOWNLOADS folder with size and modification date."""
     files = []
     for f in sorted(DOWNLOADS.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
         stat = f.stat()
@@ -804,7 +819,6 @@ async def list_downloads():
 
 @app.delete("/api/downloads/{filename}")
 async def delete_download(filename: str):
-    """Delete a downloaded video file."""
     path = DOWNLOADS / filename
     if not path.exists():
         raise HTTPException(404, "File not found")
