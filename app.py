@@ -315,6 +315,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
             temp_file = TEMP / f"tmp_{uuid.uuid4().hex[:8]}.mp4"
             cut_cmd = [
                 "ffmpeg", "-y",
+                "-threads", "1",  # <-- CRITICAL: Forces FFmpeg to use low memory
                 "-ss", ts_from,
                 "-i", str(source),
                 "-t", duration,
@@ -372,6 +373,98 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
     finally:
         if temp_file and temp_file.exists():
             temp_file.unlink(missing_ok=True)
+
+def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode: str = "normal"):
+    temp_file = None  # Kept for compatibility, though no longer needed for 9:16 mode
+    try:
+        if not validate_timestamp(ts_from):
+            raise ValueError(
+                f"Invalid start timestamp: {ts_from}. "
+                "Use HH:MM:SS or HH:MM:SS.mmm"
+            )
+
+        if not validate_timestamp(ts_to):
+            raise ValueError(
+                f"Invalid end timestamp: {ts_to}. "
+                "Use HH:MM:SS or HH:MM:SS.mmm"
+            )
+
+        source = DOWNLOADS / source_filename
+
+        if not source.exists():
+            raise RuntimeError(f"Source file not found: {source_filename}")
+
+        start_seconds = _timestamp_to_seconds(ts_from)
+        end_seconds = _timestamp_to_seconds(ts_to)
+
+        if end_seconds <= start_seconds:
+            raise ValueError("End timestamp must be greater than start timestamp")
+
+        duration = str(end_seconds - start_seconds)
+
+        safe_from = ts_from.replace(":", "-").replace(".", "_")
+        safe_to = ts_to.replace(":", "-").replace(".", "_")
+
+        clip_name = f"clip_{uuid.uuid4().hex[:8]}_{safe_from}_{safe_to}.mp4"
+        out_file = CLIPS / clip_name
+
+        if mode == "9:16":
+            # FIXED: Single-pass pipeline. No temp file needed.
+            # -threads 1 added here directly prevents the Step 2 encoding OOM crash (-9).
+            # -ss after -i ensures frame-accurate cropping without black screen stutters.
+            cmd = [
+                "ffmpeg", "-y",
+                "-threads", "1",
+                "-i", str(source),
+                "-ss", ts_from,
+                "-t", duration,
+                "-vf", "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",
+                str(out_file)
+            ]
+        else:
+            # Normal stream copy mode
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", ts_from,
+                "-i", str(source),
+                "-t", duration,
+                "-c", "copy",
+                "-avoid_negative_ts", "make_zero",
+                "-movflags", "+faststart",
+                str(out_file)
+            ]
+
+        # Single execution point for both modes
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        print(f"[CUT DEBUG] returncode={result.returncode} | file_exists={out_file.exists()} | size={out_file.stat().st_size if out_file.exists() else 0}")
+        print(f"[CUT DEBUG] stderr tail: {result.stderr.strip()[-200:]}")
+
+        if result.returncode != 0:
+            if result.returncode == -9:
+                raise RuntimeError("FFmpeg process was killed by the system (Out of Memory). Try upgrading server RAM or adding a swap file.")
+            raise RuntimeError(result.stderr.strip()[-600:])
+
+        if not out_file.exists() or out_file.stat().st_size < 1000:
+            raise RuntimeError(f"Output file missing or empty. FFmpeg stderr: {result.stderr.strip()[-400:]}")
+
+        job_set(job_id, "done", {
+            "clip_filename": clip_name,
+            "from": ts_from,
+            "to": ts_to,
+        })
+
+    except Exception as ex:
+        job_set(job_id, "error", error=str(ex))
+
+    finally:
+        if temp_file and temp_file.exists():
+            temp_file.unlink(missing_ok=True)
+
 
 
 # ---------------------------------------------------------------------------
