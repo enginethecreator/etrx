@@ -316,6 +316,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
                 "-t", duration,
                 "-vf", "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "192k",
                 "-avoid_negative_ts", "make_zero",
                 "-movflags", "+faststart",
@@ -341,7 +342,9 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
         )
 
         if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip()[-400:])
+            raise RuntimeError(result.stderr.strip()[-600:])
+        if not out_file.exists() or out_file.stat().st_size < 1000:
+            raise RuntimeError(f"Output file missing or empty. FFmpeg stderr: {result.stderr.strip()[-400:]}")
 
         job_set(job_id, "done", {
             "clip_filename": clip_name,
