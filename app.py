@@ -315,10 +315,9 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
             # -threads 1 added here directly prevents the Step 2 encoding OOM crash (-9).
             # -ss after -i ensures frame-accurate cropping without black screen stutters.
             filter_complex = (
-                "[0:v]scale=ih*9/16:ih:force_original_aspect_ratio=decrease,boxblur=20:5[bg];"
-                "[bg]scale=1080:1920[bg_scaled];"
-                "[0:v]scale=1080:-1[fg];"
-                "[bg_scaled][fg]overlay=(W-w)/2:(H-h)/2[out]"
+                "[0:v]scale=1080:1920,boxblur=40:5[bg];"
+                "[0:v]scale=1080:-1:force_original_aspect_ratio=decrease[fg];"
+                "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
             )
             cmd = [
                 "ffmpeg", "-y",
