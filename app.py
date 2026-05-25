@@ -67,12 +67,12 @@ def download_worker(job_id: str, url: str):
             return
 
         dl_cmd = ytdlp_base() + [
-            "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]",
-            "--merge-output-format", "mp4",
-            "--no-playlist",
-            "-o", str(out_file),
-            url
-        ]
+           "-S", "vcodec:h264,res,acodec:aac",  # Prefer H.264 video, AAC audio
+           "--merge-output-format", "mp4",      # Force the container to be MP4
+           "--no-playlist",
+           "-o", str(out_file),
+           url
+          ]
         result = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-400:])
@@ -100,15 +100,15 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         # -c copy = stream copy, no re-encode. Near-instant for any clip length.
         # The double -ss trick: outer seeks to keyframe, inner trims precisely.
         cmd = [
-            "ffmpeg", "-y",
-            "-ss", ts_from,
-            "-i", str(source),
-            "-to", ts_to,
-            "-c", "copy",
-            "-avoid_negative_ts", "make_zero",
-            "-movflags", "+faststart",
-            str(out_file)
-        ]
+    "ffmpeg", "-y",
+    "-ss", ts_from,
+    "-i", str(source),
+    "-to", ts_to,
+    "-c:v", "libx264",    # Re-encode video to H.264
+    "-c:a", "aac",        # Re-encode audio to AAC
+    "-movflags", "+faststart", # Move metadata to the beginning for streaming
+    str(out_file)
+]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-400:])
