@@ -277,6 +277,7 @@ def subtitle_segments_worker(job_id: str, url: str):
         
 
 def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode: str = "normal"):
+    temp_file = None
     try:
         if not validate_timestamp(ts_from):
             raise ValueError(
@@ -310,16 +311,29 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
         out_file = CLIPS / clip_name
 
         if mode == "9:16":
-            cmd = [
+            # Step 1: stream copy cut to temp — no decode of full video, tiny memory
+            temp_file = TEMP / f"tmp_{uuid.uuid4().hex[:8]}.mp4"
+            cut_cmd = [
                 "ffmpeg", "-y",
                 "-ss", ts_from,
                 "-i", str(source),
                 "-t", duration,
-                "-vf", "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "192k",
+                "-c", "copy",
                 "-avoid_negative_ts", "make_zero",
+                str(temp_file)
+            ]
+            cut_result = subprocess.run(cut_cmd, capture_output=True, text=True, timeout=120)
+            if cut_result.returncode != 0:
+                raise RuntimeError(f"Cut step failed: {cut_result.stderr.strip()[-300:]}")
+
+            # Step 2: re-encode only the small clip — ultrafast keeps memory footprint low
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(temp_file),
+                "-vf", "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "128k",
                 "-movflags", "+faststart",
                 str(out_file)
             ]
@@ -335,15 +349,14 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
                 str(out_file)
             ]
 
-        # Run ffmpeg command (now defined for both branches)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
-        # DEBUG prints (optional – can be removed after testing)
         print(f"[CUT DEBUG] returncode={result.returncode} | file_exists={out_file.exists()} | size={out_file.stat().st_size if out_file.exists() else 0}")
         print(f"[CUT DEBUG] stderr tail: {result.stderr.strip()[-200:]}")
 
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-600:])
+
         if not out_file.exists() or out_file.stat().st_size < 1000:
             raise RuntimeError(f"Output file missing or empty. FFmpeg stderr: {result.stderr.strip()[-400:]}")
 
@@ -355,6 +368,11 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
 
     except Exception as ex:
         job_set(job_id, "error", error=str(ex))
+
+    finally:
+        if temp_file and temp_file.exists():
+            temp_file.unlink(missing_ok=True)
+
 
 # ---------------------------------------------------------------------------
 # INLINE HTML (duration uses backend formatted string)
