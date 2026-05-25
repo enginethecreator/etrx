@@ -274,6 +274,7 @@ def subtitle_segments_worker(job_id: str, url: str):
         })
     except Exception as ex:
         job_set(job_id, "error", error=str(ex))
+        
 
 def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode: str = "normal"):
     try:
@@ -334,17 +335,12 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
                 str(out_file)
             ]
 
-            result = subprocess.run(
-               cmd,
-               capture_output=True,
-               text=True,
-               timeout=300
-             )
+        # Run ffmpeg command (now defined for both branches)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
-        # DEBUG - remove after confirming
+        # DEBUG prints (optional – can be removed after testing)
         print(f"[CUT DEBUG] returncode={result.returncode} | file_exists={out_file.exists()} | size={out_file.stat().st_size if out_file.exists() else 0}")
         print(f"[CUT DEBUG] stderr tail: {result.stderr.strip()[-200:]}")
-
 
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-600:])
