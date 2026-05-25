@@ -283,11 +283,8 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
             "-ss", from_clean,
             "-i", str(source),
             "-to", to_clean,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
+            "-c", "copy",
+            "-avoid_negative_ts", "make_zero",
             "-movflags", "+faststart",
             str(out_file)
         ]
