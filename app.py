@@ -322,10 +322,8 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
         clip_name = (
             f"clip_{uuid.uuid4().hex[:8]}_{safe_from}_{safe_to}.mp4"
         )
-
         out_file = CLIPS / clip_name
-
-                if mode == "9:16":
+      if mode == "9:16":
             cmd = [
                 "ffmpeg", "-y",
                 "-ss", ts_from,
