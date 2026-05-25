@@ -315,7 +315,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
                 "-i", str(source),
                 "-t", duration,
                 "-vf", "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
-                "-c:v", "libx264", "-profile:v", "main", "-level:v", "4.0",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-c:a", "aac", "-b:a", "192k",
                 "-avoid_negative_ts", "make_zero",
                 "-movflags", "+faststart",
