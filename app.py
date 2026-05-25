@@ -304,7 +304,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         # Strip milliseconds for ffmpeg compatibility
         from_clean = _timestamp_to_seconds(ts_from)
         to_clean   = _timestamp_to_seconds(ts_to)
-        duration = _calculate_duration(ts_from, ts_to
+        duration = _calculate_duration(ts_from, ts_to)
 
         clip_name = f"clip_{uuid.uuid4().hex[:8]}_{from_clean.replace(':','-')}_{to_clean.replace(':','-')}.mp4"
         out_file = CLIPS / clip_name
