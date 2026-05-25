@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import uuid
 import subprocess
 import threading
@@ -33,7 +34,7 @@ def job_set(job_id: str, state: str, data: dict = None, error: str = None):
     JOBS[job_id] = {"state": state, "data": data or {}, "error": error}
 
 # ---------------------------------------------------------------------------
-# WORKERS
+# COMMON UTILS
 # ---------------------------------------------------------------------------
 def ytdlp_base() -> list:
     """Base yt-dlp command with cookies if available."""
@@ -42,7 +43,14 @@ def ytdlp_base() -> list:
         cmd += ["--cookies", str(COOKIES)]
     return cmd
 
-def extract_subtitle_text(vtt_path: Path) -> str:
+def format_time(seconds: float) -> str:
+    """Convert seconds to HH:MM:SS.mmm format."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
+
+def extract_plain_text_from_vtt(vtt_path: Path) -> str:
     """Extract plain text from a WebVTT subtitle file."""
     if not vtt_path.exists():
         return ""
@@ -56,8 +64,11 @@ def extract_subtitle_text(vtt_path: Path) -> str:
                     lines.append(clean)
     return ' '.join(lines)
 
+# ---------------------------------------------------------------------------
+# WORKERS
+# ---------------------------------------------------------------------------
 def download_worker(job_id: str, url: str):
-    """Download video + subtitles."""
+    """Download video + plain text subtitles (VTT -> text)."""
     try:
         # Metadata
         meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
@@ -65,19 +76,18 @@ def download_worker(job_id: str, url: str):
         if meta_res.returncode != 0:
             raise RuntimeError(meta_res.stderr.strip()[:400])
 
-        import json
-        meta     = json.loads(meta_res.stdout.strip().splitlines()[-1])
+        meta = json.loads(meta_res.stdout.strip().splitlines()[-1])
         video_id = meta.get("id", "unknown")
-        title    = meta.get("title", "untitled")
+        title = meta.get("title", "untitled")
         duration = meta.get("duration", 0)
 
         safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:60]
-        out_file   = DOWNLOADS / f"{video_id}_{safe_title}.mp4"
+        out_file = DOWNLOADS / f"{video_id}_{safe_title}.mp4"
 
         if out_file.exists():
+            # Already have video, try to get subtitles if missing
             vtt_path = out_file.with_suffix('.en.vtt')
-            sub_text = extract_subtitle_text(vtt_path) if vtt_path.exists() else ""
-            vtt_path.unlink(missing_ok=True)
+            sub_text = extract_plain_text_from_vtt(vtt_path) if vtt_path.exists() else ""
             job_set(job_id, "done", {
                 "video_id": video_id,
                 "title": title,
@@ -87,7 +97,7 @@ def download_worker(job_id: str, url: str):
             })
             return
 
-        # Download video with H.264/AAC
+        # Download video with H.264/AAC (broad compatibility)
         dl_cmd = ytdlp_base() + [
             "-S", "vcodec:h264,res,acodec:aac",
             "--merge-output-format", "mp4",
@@ -99,7 +109,7 @@ def download_worker(job_id: str, url: str):
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip()[-400:])
 
-        # Download subtitles
+        # Download subtitles as VTT (for plain text)
         vtt_path = out_file.with_suffix('.en.vtt')
         sub_cmd = ytdlp_base() + [
             "--skip-download",
@@ -111,7 +121,7 @@ def download_worker(job_id: str, url: str):
             url
         ]
         subprocess.run(sub_cmd, capture_output=True, timeout=60)
-        sub_text = extract_subtitle_text(vtt_path)
+        sub_text = extract_plain_text_from_vtt(vtt_path)
         vtt_path.unlink(missing_ok=True)
 
         job_set(job_id, "done", {
@@ -125,18 +135,17 @@ def download_worker(job_id: str, url: str):
         job_set(job_id, "error", error=str(ex))
 
 def subtitle_only_worker(job_id: str, url: str):
-    """Download only subtitles (no video)."""
+    """Download only plain text subtitles (no video)."""
     try:
-        # Get video title for display
+        # Get title
         meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
         meta_res = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
         if meta_res.returncode != 0:
             raise RuntimeError(meta_res.stderr.strip()[:400])
-        import json
         meta = json.loads(meta_res.stdout.strip().splitlines()[-1])
         title = meta.get("title", "untitled")
 
-        # Temp file for subtitle
+        # Temp VTT file
         tmp_base = TEMP / f"sub_{job_id}"
         sub_cmd = ytdlp_base() + [
             "--skip-download",
@@ -149,12 +158,80 @@ def subtitle_only_worker(job_id: str, url: str):
         ]
         subprocess.run(sub_cmd, capture_output=True, timeout=60)
         vtt_path = Path(str(tmp_base) + ".en.vtt")
-        sub_text = extract_subtitle_text(vtt_path)
+        sub_text = extract_plain_text_from_vtt(vtt_path)
         vtt_path.unlink(missing_ok=True)
 
         job_set(job_id, "done", {
             "title": title,
             "subtitle_text": sub_text,
+        })
+    except Exception as ex:
+        job_set(job_id, "error", error=str(ex))
+
+def subtitle_segments_worker(job_id: str, url: str):
+    """
+    Extract structured subtitle segments with start/end timestamps
+    using yt-dlp's JSON3 format (tStartMs + dDurationMs).
+    """
+    try:
+        # Get video ID and title for display
+        meta_cmd = ytdlp_base() + ["--dump-json", "--no-playlist", url]
+        meta_res = subprocess.run(meta_cmd, capture_output=True, text=True, timeout=60)
+        if meta_res.returncode != 0:
+            raise RuntimeError(meta_res.stderr.strip()[:400])
+        meta = json.loads(meta_res.stdout.strip().splitlines()[-1])
+        video_id = meta.get("id", "unknown")
+        title = meta.get("title", "untitled")
+
+        # Download JSON3 subtitles (auto + manual fallback)
+        tmp_base = TEMP / f"segments_{job_id}"
+        sub_cmd = ytdlp_base() + [
+            "--skip-download",
+            "--write-auto-subs",
+            "--write-subs",
+            "--sub-langs", "en",
+            "--sub-format", "json3",
+            "-o", str(tmp_base),
+            url
+        ]
+        subprocess.run(sub_cmd, capture_output=True, timeout=60)
+
+        # Look for JSON3 file
+        json3_path = Path(str(tmp_base) + ".en.json3")
+        if not json3_path.exists():
+            # Try manual subs (sometimes named differently)
+            json3_path = Path(str(tmp_base) + ".en.json3")
+            if not json3_path.exists():
+                raise RuntimeError("No JSON3 subtitles found (English).")
+
+        with open(json3_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # Parse events into desired segment array
+        segments = []
+        for event in data.get("events", []):
+            start_ms = event.get("tStartMs", 0)
+            duration_ms = event.get("dDurationMs", 0)
+            # Combine text fragments
+            text_parts = [seg.get("utf8", "") for seg in event.get("segs", [])]
+            text = "".join(text_parts).strip()
+            if not text or text == "\n":
+                continue
+
+            start_sec = start_ms / 1000.0
+            end_sec = (start_ms + duration_ms) / 1000.0
+            segments.append({
+                "start": format_time(start_sec),
+                "end": format_time(end_sec),
+                "text": text
+            })
+
+        # Cleanup
+        json3_path.unlink(missing_ok=True)
+
+        job_set(job_id, "done", {
+            "segments": segments,
+            "title": title,
         })
     except Exception as ex:
         job_set(job_id, "error", error=str(ex))
@@ -166,8 +243,9 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
             raise RuntimeError(f"Source file not found: {source_filename}")
 
         clip_name = f"clip_{uuid.uuid4().hex[:8]}_{ts_from.replace(':','-')}_{ts_to.replace(':','-')}.mp4"
-        out_file  = CLIPS / clip_name
+        out_file = CLIPS / clip_name
 
+        # Fast copy cut
         cmd = [
             "ffmpeg", "-y",
             "-ss", ts_from,
@@ -191,7 +269,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         job_set(job_id, "error", error=str(ex))
 
 # ---------------------------------------------------------------------------
-# INLINE HTML (with subtitle-only button)
+# INLINE HTML (with "Copy Segments (JSON)" button)
 # ---------------------------------------------------------------------------
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -277,7 +355,10 @@ button:disabled{opacity:.35;cursor:not-allowed}
         </div>
         <div id="subtitle-area" style="display:none" class="subtitle-box">
           <div class="lbl">📝 Transcript (English)
-            <button class="copy-btn" onclick="copySubtitle()">Copy Text</button>
+            <div style="display: flex; gap: 8px;">
+                <button class="copy-btn" onclick="copySubtitle()">Copy Text</button>
+                <button class="copy-btn" onclick="fetchAndCopySegments()">Copy Segments (JSON)</button>
+            </div>
           </div>
           <textarea id="subtitle-text" rows="6" readonly placeholder="Subtitle text will appear here..."></textarea>
         </div>
@@ -443,8 +524,8 @@ async function fetchSubtitlesOnly() {
       document.getElementById('dl-title').textContent = d.title;
       document.getElementById('dl-meta').textContent = 'Subtitles only (no video)';
       document.getElementById('dl-info').style.display = '';
-      document.getElementById('dl-full-btn').disabled = true;  // no video to download
-      document.getElementById('cut-btn').disabled = true;      // can't cut without video
+      document.getElementById('dl-full-btn').disabled = true;
+      document.getElementById('cut-btn').disabled = true;
       document.getElementById('dl-btn').disabled = false;
 
       if (currentSubtitle) {
@@ -459,6 +540,33 @@ async function fetchSubtitlesOnly() {
     });
   } catch(e) {
     document.getElementById('dl-btn').disabled = false;
+    setMsg('dl-msg', 'err', '✗ Request failed');
+  }
+}
+
+async function fetchAndCopySegments() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { setMsg('dl-msg', 'err', '✗ Enter a YouTube URL'); return; }
+
+  setMsg('dl-msg', '', 'Fetching subtitle segments...');
+  try {
+    const res = await fetch('/api/subtitles-segments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+
+    poll(data.job_id, 'dl-pb', 'dl-msg', (d) => {
+      const segmentsJson = JSON.stringify(d.segments, null, 2);
+      navigator.clipboard.writeText(segmentsJson);
+      setMsg('dl-msg', 'ok', `✓ Segments copied to clipboard! (${d.segments.length} segments)`);
+      // Optional: display preview in the textarea
+      document.getElementById('subtitle-text').value = segmentsJson;
+    }, () => {
+      setMsg('dl-msg', 'err', '✗ Failed to fetch segments');
+    });
+  } catch(e) {
     setMsg('dl-msg', 'err', '✗ Request failed');
   }
 }
@@ -491,7 +599,7 @@ async function startCut() {
       document.getElementById('cut-info').style.display = '';
       document.getElementById('cut-dl-btn').disabled = false;
       document.getElementById('cut-btn').disabled = false;
-      downloadClip();  // auto-download
+      downloadClip();
     }, () => {
       document.getElementById('cut-btn').disabled = false;
     });
@@ -563,6 +671,13 @@ async def api_subtitles_only(req: SubtitleOnlyRequest):
     job_id = str(uuid.uuid4())
     job_set(job_id, "running")
     threading.Thread(target=subtitle_only_worker, args=(job_id, req.url), daemon=True).start()
+    return {"job_id": job_id}
+
+@app.post("/api/subtitles-segments")
+async def api_subtitles_segments(req: SubtitleOnlyRequest):
+    job_id = str(uuid.uuid4())
+    job_set(job_id, "running")
+    threading.Thread(target=subtitle_segments_worker, args=(job_id, req.url), daemon=True).start()
     return {"job_id": job_id}
 
 @app.post("/api/cut")
