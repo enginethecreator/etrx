@@ -326,22 +326,19 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str):
         out_file = CLIPS / clip_name
 
         cmd = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            ts_from,
-            "-i",
-            str(source),
-            "-t",
-            duration,
-            "-c",
-            "copy",
-            "-avoid_negative_ts",
-            "make_zero",
-            "-movflags",
-            "+faststart",
-            str(out_file)
-        ]
+    "ffmpeg", "-y",
+    "-ss", ts_from,
+    "-i", str(source),
+    "-t", duration,
+    "-c:v", "libx264",
+    "-preset", "fast",
+    "-crf", "23",
+    "-vf", "scale=1080:1920:force_original_aspect_ratio=1,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-movflags", "+faststart",
+    str(out_file)
+]
 
         result = subprocess.run(
             cmd,
