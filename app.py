@@ -312,7 +312,7 @@ def cut_worker(job_id: str, source_filename: str, ts_from: str, ts_to: str, mode
         
         if mode == "9:16":
             # Letterbox pipeline (Fits the entire source video, adds black bars)
-            video_filter = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
+            video_filter = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,chromakey=0x00FF00:0.1:0.2"
             cmd = [
                 "ffmpeg", "-y",
                 "-threads", "1",
